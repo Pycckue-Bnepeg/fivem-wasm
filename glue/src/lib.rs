@@ -1,6 +1,7 @@
 use std::ffi::{c_void, CStr};
 
 pub type LogFunc = extern "C" fn(msg: *const i8);
+pub type InvokeFunc = extern "C" fn(args: *mut c_void);
 
 #[no_mangle]
 pub extern "C" fn wasm_create_runtime() -> *mut c_void {
@@ -65,4 +66,9 @@ pub unsafe extern "C" fn wasm_runtime_memory_usage(runtime: *mut c_void) -> u32 
     let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
 
     runtime.memory_size() * 64 * 1024
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_set_invoke_native(invoke: InvokeFunc) {
+    cfx_wasm_runtime::set_native_invoke(invoke);
 }

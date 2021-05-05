@@ -4,8 +4,19 @@ use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
 pub type LogFunc = extern "C" fn(message: *const i8);
+pub type InvokeFunc = extern "C" fn(ctx: *mut NativeContext);
+
+#[repr(C)]
+#[derive(Default)]
+pub struct NativeContext {
+    arguments: [usize; 32],
+    num_arguments: u32,
+    num_results: u32,
+    native_identifier: u64,
+}
 
 static mut LOGGER: Option<LogFunc> = None;
+static mut INVOKE: Option<InvokeFunc> = None;
 
 pub struct Runtime {
     engine: Engine,
@@ -122,10 +133,55 @@ impl ScriptModule {
             })
             .unwrap();
 
+        linker
+            .func(
+                "host",
+                "invoke",
+                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32| {
+                    // array ptr, array len
+                    let mut buf = vec![0u32; len as usize];
+                    let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
+
+                    {
+                        let tmp = unsafe {
+                            let ptr = buf.as_mut_ptr() as *mut u8;
+                            std::slice::from_raw_parts_mut(
+                                ptr,
+                                len as usize * std::mem::size_of::<i32>(),
+                            )
+                        };
+
+                        mem.read(ptr as _, tmp).unwrap();
+                    }
+
+                    let h2 = h2 as u32;
+                    let hash = ((h1 as u64) << 32) + (h2 as u64);
+                    let mut ctx = NativeContext::default();
+
+                    ctx.native_identifier = hash;
+                    ctx.num_arguments = len as _;
+
+                    for (idx, &offset) in buf.iter().enumerate() {
+                        unsafe {
+                            let mem_start = mem.data_unchecked().as_ptr();
+                            ctx.arguments[idx] = mem_start.offset(offset as isize) as usize;
+                        };
+                    }
+
+                    if let Some(invoke) = unsafe { INVOKE } {
+                        invoke(&mut ctx);
+                    }
+                },
+            )
+            .unwrap();
+
         let module = Module::new(engine, bytes).unwrap();
         let instance = linker.instantiate(&module).unwrap();
 
+        let start = instance.get_func("_start").expect("no _start entry");
         let on_event = instance.get_func("on_event");
+
+        start.call(&[]).unwrap();
 
         ScriptModule {
             store,
@@ -161,5 +217,11 @@ impl ScriptModule {
 pub fn set_logger(log: LogFunc) {
     unsafe {
         LOGGER = Some(log);
+    }
+}
+
+pub fn set_native_invoke(invoke: extern "C" fn(ctx: *mut std::ffi::c_void)) {
+    unsafe {
+        INVOKE = Some(std::mem::transmute(invoke));
     }
 }

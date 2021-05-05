@@ -5,6 +5,8 @@ extern crate alloc;
 use core::alloc::Layout;
 use std::ffi::CString;
 
+mod invoke;
+
 mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
@@ -68,5 +70,6 @@ fn decode_args(buffer: &[u8]) -> rmpv::Value {
 
 #[no_mangle]
 pub extern "C" fn _start() {
+    invoke::register_resource_as_event_handler("onServerResourceStart");
     log("I AM FUCKING STARTED !");
 }
