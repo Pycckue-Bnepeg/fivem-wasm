@@ -1,0 +1,9 @@
+[package]
+name = "cfx-wasm-runtime"
+version = "0.1.0"
+authors = ["ZOTTCE <zottce@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+wasmtime = "0.26.0"
+wasmtime-wasi = "0.26.0"

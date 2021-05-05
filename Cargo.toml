@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "runtime",
+    "glue",
+
+    # test
+    "standalone",
+
+    # examples
+    "examples/entry",
+]
