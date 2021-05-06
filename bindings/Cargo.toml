@@ -5,3 +5,6 @@ authors = ["ZOTTCE <zottce@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+rmp-serde = "0.15.4"
+futures = { version = "0.3.14", features = ["executor"] }
+serde = { version = "1.0", features = ["derive"] }

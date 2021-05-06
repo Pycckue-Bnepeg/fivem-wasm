@@ -196,7 +196,7 @@ impl ScriptModule {
             .get_typed_func::<(i32, u32), u32>("__alloc")
             .unwrap();
 
-        let data_ptr = malloc.call((bytes.len() as _, 0)).unwrap();
+        let data_ptr = malloc.call((bytes.len() as _, 1)).unwrap();
         let mem = self.instance.get_memory("memory").unwrap();
 
         mem.write(data_ptr as _, bytes).unwrap();
@@ -210,7 +210,7 @@ impl ScriptModule {
             .get_typed_func::<(u32, u32, u32), ()>("__free")
             .unwrap();
 
-        free.call((offset as _, length as _, 0)).unwrap();
+        free.call((offset as _, length as _, 1)).unwrap();
     }
 }
 

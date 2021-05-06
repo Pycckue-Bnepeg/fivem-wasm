@@ -1,6 +1,8 @@
+pub mod events;
 #[doc(hidden)]
 pub mod exports;
 pub mod invoker;
+pub mod runtime;
 
 mod ffi {
     #[link(wasm_import_module = "host")]
