@@ -46,23 +46,17 @@ impl Runtime {
     pub fn trigger_event(&mut self, event_name: &CStr, args: &[u8], source: &CStr) {
         if let Some(script) = self.script.as_mut() {
             if let Some(func) = &script.on_event {
-                println!("RUNTIME: {:?}", event_name);
-                println!("RUNTIME: {:?}", event_name.to_bytes_with_nul());
-                println!("RUNTIME: {:?}", event_name.to_str().unwrap());
-
                 let ev = script.alloc_bytes(event_name.to_bytes_with_nul());
                 let args = script.alloc_bytes(args);
                 let src = script.alloc_bytes(source.to_bytes_with_nul());
 
                 // event, args, args_len, src
-                let res = func.call(&[
+                let _ = func.call(&[
                     Val::I32(ev.0 as _),
                     Val::I32(args.0 as _),
                     Val::I32(args.1 as _),
                     Val::I32(src.0 as _),
                 ]);
-
-                println!("call result: {:?}", res);
 
                 script.free_bytes(ev);
                 script.free_bytes(args);
