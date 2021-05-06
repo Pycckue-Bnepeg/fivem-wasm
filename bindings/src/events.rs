@@ -64,6 +64,10 @@ impl<T: DeserializeOwned> Event<T> {
     pub fn payload(&self) -> &T {
         &self.payload
     }
+
+    pub fn into_inner(self) -> T {
+        self.payload
+    }
 }
 
 pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Event<T>> {

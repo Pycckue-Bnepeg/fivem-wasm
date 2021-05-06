@@ -30,12 +30,12 @@ impl Resource {
 pub extern "C" fn _start() {
     let start_events =
         fivem_bindings::events::subscribe::<ServerResourceStart>("onServerResourceStart")
-            .map(|ev| Resource::Start(ev.payload().resource_name.clone()))
+            .map(|ev| Resource::Start(ev.into_inner().resource_name))
             .boxed_local();
 
     let stop_events =
-        fivem_bindings::events::subscribe::<ServerResourceStart>("onServerResourceStop")
-            .map(|ev| Resource::Stop(ev.payload().resource_name.clone()))
+        fivem_bindings::events::subscribe::<ServerResourceStop>("onServerResourceStop")
+            .map(|ev| Resource::Stop(ev.into_inner().resource_name))
             .boxed_local();
 
     let mut resources = futures::stream::select(start_events, stop_events);
