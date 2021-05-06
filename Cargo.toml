@@ -2,6 +2,7 @@
 members = [
     "runtime",
     "glue",
+    "bindings",
 
     # test
     "standalone",

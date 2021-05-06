@@ -19,4 +19,8 @@ Push-Location -Path "E:\sources\c\fivem-fork\code" -StackName FiveMWasm;
 
 .\tools\ci\premake5.exe vs2019 --game=server
 
+# Push-Location -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin" -StackName FiveMWasm;
+# ./MSbuild.exe "E:\sources\c\fivem-fork\code\build\server\windows\CitizenMP.sln" /t:Build /p:Configuration=Release /p:Platform=x64 -m
+
 Pop-Location -StackName FiveMWasm;
+# Pop-Location -StackName FiveMWasm;

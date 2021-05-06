@@ -142,7 +142,7 @@ impl ScriptModule {
                     let mut buf = vec![0u32; len as usize];
                     let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
 
-                    {
+                    if len > 0 {
                         let tmp = unsafe {
                             let ptr = buf.as_mut_ptr() as *mut u8;
                             std::slice::from_raw_parts_mut(

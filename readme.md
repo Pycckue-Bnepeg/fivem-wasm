@@ -7,6 +7,7 @@ WASM рантайм для мультиплеера [FiveM](https://fivem.net/)
 
 ## структура
 * [`examples\entry`](examples/entry/) - ну пример (сырой)
+* [`bindings`](bindings/) - rust впоперы + биндинги + всякая залупа для написания скриптов
 * [`glue`](glue/) - статическая библиотека чтобы засунуть ее в fivem
 * [`runtime`](runtime/) - васм рантайм (wasmtime)
 * [`standalone`](standalone/) - тупа поиграться с рантаймом выше

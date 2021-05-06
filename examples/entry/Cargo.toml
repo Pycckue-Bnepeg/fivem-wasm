@@ -9,3 +9,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rmpv = "0.4.7"
+fivem-bindings = { path = "../../bindings" }
