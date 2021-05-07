@@ -13,8 +13,6 @@ exports:
 * `_start`
 * `__alloc(size: u32, alignment: u32) -> u32`
 * `__free(ptr: *const c_void, size: u32, alignment: u32)`
-
-optional exports:
 * `on_tick()`
 * `on_event(event_name: *const u8, args: *const u8, args_len: u32, src: *const u8)`
     * `event_name` - си строка с именем события

@@ -148,6 +148,7 @@ impl ScriptModule {
                         mem.read(ptr as _, tmp).unwrap();
                     }
 
+                    let h1 = h1 as u32;
                     let h2 = h2 as u32;
                     let hash = ((h1 as u64) << 32) + (h2 as u64);
                     let mut ctx = NativeContext::default();

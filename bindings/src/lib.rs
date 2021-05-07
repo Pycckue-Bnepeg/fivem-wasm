@@ -11,6 +11,7 @@ mod ffi {
     }
 }
 
+/// Logs a message to the FiveM server or client
 pub fn log<T: AsRef<str>>(message: T) {
     let msg = message.as_ref();
     let cstr = std::ffi::CString::new(msg).unwrap();

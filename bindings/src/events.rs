@@ -19,6 +19,7 @@ thread_local! {
     static EVENTS: RefCell<HashMap<String, UnboundedSender<InternalEvent>>> = RefCell::new(HashMap::new());
 }
 
+#[doc(hidden)]
 #[no_mangle]
 pub unsafe extern "C" fn on_event(
     cstring: *const i8,
@@ -50,6 +51,7 @@ pub unsafe extern "C" fn on_event(
     });
 }
 
+/// A generic event representation.
 #[derive(Debug)]
 pub struct Event<T: DeserializeOwned> {
     source: String,
@@ -57,6 +59,7 @@ pub struct Event<T: DeserializeOwned> {
 }
 
 impl<T: DeserializeOwned> Event<T> {
+    /// Get a source that triggered that event.
     pub fn source(&self) -> &str {
         &self.source
     }
