@@ -1,8 +1,10 @@
+use crate::types::RetVal;
+
 #[doc(hidden)]
 pub mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
-        pub fn invoke(hash_hi: i32, hash_lo: i32, ptr: i32, len: i32);
+        pub fn invoke(hash_hi: i32, hash_lo: i32, ptr: i32, len: i32, rettype: i32) -> i32;
     }
 }
 
@@ -14,57 +16,7 @@ pub enum Val<'a> {
     Bytes(&'a [u8]),
 }
 
-#[repr(C)]
-pub struct Vector3 {
-    pub x: f32,
-    pad_0: u32,
-
-    pub y: f32,
-    pad_1: u32,
-
-    pub z: f32,
-    pad_2: u32,
-}
-
-#[repr(C)]
-pub struct ScrObject {
-    data: *const u8,
-    length: usize,
-}
-
-impl RetVal for () {
-    const IDENT: usize = 0;
-
-    fn convert(_: &[u8]) -> Self {
-        ()
-    }
-}
-
-impl RetVal for String {
-    const IDENT: usize = 2;
-
-    fn convert(bytes: &[u8]) -> Self {
-        unsafe {
-            let cstr = std::ffi::CStr::from_ptr(bytes.as_ptr() as *const _);
-            cstr.to_str().unwrap().to_owned()
-        }
-    }
-}
-
-impl RetVal for Vector3 {
-    const IDENT: usize = 3;
-
-    fn convert(bytes: &[u8]) -> Self {
-        unsafe { std::mem::transmute_copy(&bytes) }
-    }
-}
-
-pub trait RetVal {
-    const IDENT: usize;
-
-    fn convert(bytes: &[u8]) -> Self;
-}
-
+// TODO: Result<Ret, ()>
 pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Ret
 where
     Ret: RetVal,
@@ -103,10 +55,16 @@ where
     }
 
     unsafe {
-        ffi::invoke(hash_hi, hash_lo, args.as_ptr() as _, args.len() as _);
-    }
+        let ret = ffi::invoke(
+            hash_hi,
+            hash_lo,
+            args.as_ptr() as _,
+            args.len() as _,
+            Ret::IDENT as i32,
+        );
 
-    Ret::convert(&[])
+        Ret::convert(ret as *mut u8)
+    }
 }
 
 /// A FiveM runtime native. Registers current resource as an event handler.
@@ -114,21 +72,3 @@ where
 pub fn register_resource_as_event_handler(event: &str) {
     invoke::<(), _>(0xD233A168, &[Val::String(event)]);
 }
-
-/*
-
-    scrObject {
-        data: *const u8,
-        length: usize,
-    }
-
-    scrVector {
-        x: f32,
-        pad_0: u32,
-        y: f32,
-        pad_1: u32,
-        z: f32,
-        pad_2: u32,
-    }
-
-*/

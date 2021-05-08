@@ -3,9 +3,10 @@ use futures::{
     Stream, StreamExt,
 };
 
-use serde::de::DeserializeOwned;
-
+use serde::{de::DeserializeOwned, Serialize};
 use std::{cell::RefCell, collections::HashMap, ffi::CStr};
+
+use crate::invoker::Val;
 
 #[derive(Debug)]
 struct InternalEvent {
@@ -92,4 +93,29 @@ pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Ev
         source: event.source,
         payload,
     })
+}
+
+pub fn emit<T: Serialize>(event_name: &str, payload: T) {
+    if let Ok(payload) = rmp_serde::to_vec(&payload) {
+        let args = &[
+            Val::String(event_name),
+            Val::Bytes(&payload),
+            Val::Integer(payload.len() as _),
+        ];
+
+        crate::invoker::invoke::<(), _>(0x91310870, args); // TRIGGER_EVENT_INTERNAL
+    }
+}
+
+pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
+    if let Ok(payload) = rmp_serde::to_vec(&payload) {
+        let args = &[
+            Val::String(event_name),
+            Val::String(source),
+            Val::Bytes(&payload),
+            Val::Integer(payload.len() as _),
+        ];
+
+        crate::invoker::invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
+    }
 }

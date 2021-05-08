@@ -230,6 +230,7 @@ dependencies = [
 name = "cfx-wasm-runtime"
 version = "0.1.0"
 dependencies = [
+ "fivem-bindings",
  "wasmtime",
  "wasmtime-wasi",
 ]

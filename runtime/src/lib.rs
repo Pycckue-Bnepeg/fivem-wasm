@@ -1,5 +1,6 @@
 use std::ffi::CStr;
 
+use fivem_bindings::types::ReturnTypes;
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
@@ -131,7 +132,7 @@ impl ScriptModule {
             .func(
                 "host",
                 "invoke",
-                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32| {
+                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, rettype: i32| -> i32 {
                     // array ptr, array len
                     let mut buf = vec![0u32; len as usize];
                     let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
@@ -166,6 +167,49 @@ impl ScriptModule {
                     if let Some(invoke) = unsafe { INVOKE } {
                         invoke(&mut ctx);
                     }
+
+                    if ctx.num_results == 0 {
+                        return 0;
+                    }
+
+                    let rettype = ReturnTypes::from(rettype as u32);
+
+                    match rettype {
+                        ReturnTypes::Empty => 0,
+                        ReturnTypes::Number => ctx.arguments[0] as _,
+                        ReturnTypes::String => ctx.arguments[0] as _,
+
+                        ReturnTypes::Vector3 => {
+                            let vec =
+                                ctx.arguments.as_ptr() as *const fivem_bindings::types::Vector3;
+
+                            Self::alloc_value(&caller, unsafe { &*vec }).0 as _
+                        }
+
+                        ReturnTypes::MsgPack => {
+                            let scrobj =
+                                ctx.arguments.as_ptr() as *const fivem_bindings::types::ScrObject;
+
+                            let scrobj = unsafe { &*scrobj };
+                            let bytes = unsafe {
+                                std::slice::from_raw_parts(
+                                    scrobj.data as *const u8,
+                                    scrobj.length as _,
+                                )
+                            };
+
+                            let (ptr, _) = Self::alloc_vec(&caller, bytes);
+
+                            let scrobj = fivem_bindings::types::ScrObject {
+                                data: ptr as _,
+                                length: scrobj.length,
+                            };
+
+                            Self::alloc_value(&caller, &scrobj).0 as _
+                        }
+
+                        ReturnTypes::Unk => 0,
+                    }
                 },
             )
             .unwrap();
@@ -183,6 +227,45 @@ impl ScriptModule {
             instance,
             on_event,
         }
+    }
+
+    // TODO: Make an allocation module?
+    fn alloc_value<T: Sized>(caller: &Caller, value: &T) -> (u32, std::alloc::Layout) {
+        let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
+        let malloc = caller.get_export("__alloc").unwrap().into_func().unwrap();
+        let malloc = malloc.typed::<(i32, u32), u32>().unwrap();
+
+        let layout = std::alloc::Layout::new::<T>();
+
+        let data_ptr = malloc
+            .call((layout.size() as _, layout.align() as _))
+            .unwrap();
+
+        unsafe {
+            let mem = mem.data_ptr().add(data_ptr as _) as *mut T;
+            std::ptr::copy(value, mem, 1);
+        }
+
+        return (data_ptr, layout);
+    }
+
+    fn alloc_vec<T: Sized>(caller: &Caller, value: &[T]) -> (u32, std::alloc::Layout) {
+        let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
+        let malloc = caller.get_export("__alloc").unwrap().into_func().unwrap();
+        let malloc = malloc.typed::<(i32, u32), u32>().unwrap();
+
+        let layout = std::alloc::Layout::array::<T>(value.len()).unwrap();
+
+        let data_ptr = malloc
+            .call((layout.size() as _, layout.align() as _))
+            .unwrap();
+
+        unsafe {
+            let mem = mem.data_ptr().add(data_ptr as _) as *mut T;
+            std::ptr::copy(value.as_ptr(), mem, value.len());
+        }
+
+        return (data_ptr, layout);
     }
 
     fn alloc_bytes(&self, bytes: &[u8]) -> (u32, usize) {

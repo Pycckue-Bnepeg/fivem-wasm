@@ -1,4 +1,4 @@
-use fivem_bindings::log;
+use fivem_bindings::{log, types::Packed};
 use futures::prelude::*;
 use serde::Deserialize;
 
@@ -26,6 +26,22 @@ impl Resource {
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct Commands {
+    name: String,
+}
+
+// TODO: Ref funcs
+// fn register_command() {
+//     // 0x5FA79B0F
+// }
+
+fn registered_commands() -> Vec<Commands> {
+    // 0xD4BEF069
+    let list: Packed<Vec<Commands>> = fivem_bindings::invoker::invoke(0xD4BEF069, &[]);
+    list.into_inner()
+}
+
 #[no_mangle]
 pub extern "C" fn _start() {
     let start_events =
@@ -46,7 +62,9 @@ pub extern "C" fn _start() {
         }
     };
 
-    let res = fivem_bindings::runtime::spawn(task);
+    let _ = fivem_bindings::runtime::spawn(task);
 
-    log(format!("cool suck me. {:?}", res));
+    let commands = registered_commands();
+
+    log(format!("{:?}", commands));
 }
