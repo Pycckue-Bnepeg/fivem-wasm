@@ -1,4 +1,4 @@
-use fivem_bindings::{log, types::Packed};
+use fivem::{log, types::Packed};
 use futures::prelude::*;
 use serde::Deserialize;
 
@@ -38,21 +38,19 @@ struct Commands {
 
 fn registered_commands() -> Vec<Commands> {
     // 0xD4BEF069
-    let list: Packed<Vec<Commands>> = fivem_bindings::invoker::invoke(0xD4BEF069, &[]);
+    let list: Packed<Vec<Commands>> = fivem::invoker::invoke(0xD4BEF069, &[]);
     list.into_inner()
 }
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    let start_events =
-        fivem_bindings::events::subscribe::<ServerResourceStart>("onServerResourceStart")
-            .map(|ev| Resource::Start(ev.into_inner().resource_name))
-            .boxed_local();
+    let start_events = fivem::events::subscribe::<ServerResourceStart>("onServerResourceStart")
+        .map(|ev| Resource::Start(ev.into_inner().resource_name))
+        .boxed_local();
 
-    let stop_events =
-        fivem_bindings::events::subscribe::<ServerResourceStop>("onServerResourceStop")
-            .map(|ev| Resource::Stop(ev.into_inner().resource_name))
-            .boxed_local();
+    let stop_events = fivem::events::subscribe::<ServerResourceStop>("onServerResourceStop")
+        .map(|ev| Resource::Stop(ev.into_inner().resource_name))
+        .boxed_local();
 
     let mut resources = futures::stream::select(start_events, stop_events);
 
@@ -62,7 +60,7 @@ pub extern "C" fn _start() {
         }
     };
 
-    let _ = fivem_bindings::runtime::spawn(task);
+    let _ = fivem::runtime::spawn(task);
 
     let commands = registered_commands();
 

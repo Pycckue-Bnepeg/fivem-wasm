@@ -65,6 +65,7 @@ impl<T: DeserializeOwned> Event<T> {
         &self.source
     }
 
+    /// Payload of an event
     pub fn payload(&self) -> &T {
         &self.payload
     }

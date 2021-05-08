@@ -230,7 +230,7 @@ dependencies = [
 name = "cfx-wasm-runtime"
 version = "0.1.0"
 dependencies = [
- "fivem-bindings",
+ "fivem",
  "wasmtime",
  "wasmtime-wasi",
 ]
@@ -466,7 +466,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 name = "entry"
 version = "0.1.0"
 dependencies = [
- "fivem-bindings",
+ "fivem",
  "futures",
  "serde",
 ]
@@ -522,7 +522,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fivem-bindings"
+name = "fivem"
 version = "0.1.0"
 dependencies = [
  "futures",

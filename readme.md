@@ -1,25 +1,33 @@
 # FiveM WASM runtime
-WASM рантайм для мультиплеера [FiveM](https://fivem.net/)
+[Wasmtime](https://wasmtime.dev) runtime that adds ability to create and use WASM files on [FiveM](https://fivem.net) severs and clients in additional to js and lua.
 
-форк fivem лежит [здесь](https://github.com/zottce/fivem). в нем сделан [компонент](https://github.com/ZOTTCE/fivem/tree/wasm/code/components/citizen-scripting-wasm) на плюсах, который  использует внутри себя этот код
+This is a main repository implementing the runtime and containing bindings for Rust.
 
-код пиздец, не смотреть ...
+[The fork](https://github.com/zottce/fivem) contains only [C++ component](https://github.com/ZOTTCE/fivem/tree/wasm/code/components/citizen-scripting-wasm) that links and calls [a static library built in Rust](glue/).
 
-## структура
-* [`examples\entry`](examples/entry/) - ну пример (сырой)
-* [`bindings`](bindings/) - rust впоперы + биндинги + всякая залупа для написания скриптов
-* [`glue`](glue/) - статическая библиотека чтобы засунуть ее в fivem
-* [`runtime`](runtime/) - васм рантайм (wasmtime)
-* [`standalone`](standalone/) - тупа поиграться с рантаймом выше
+Also there is a question. Should it be BA's `wasmtime` or Parity's `wasmi`? Currently there is no need to use WASI because it only allows use `std::fs::File`.
 
-## сборка
-* компилятор RUST
-* [файвм по приколу собрать](https://github.com/citizenfx/fivem/blob/master/docs/building.md)
-* стыбзить или воспользоваться [скриптом](utils/fivem-build.ps1)
+**I didn't test this on the client side.**
 
-## задачи на будушее
-* ПРИБРАТЬСЯ
-* пиздатый вппопер (wrapper) для раста для васм скриптов
-* васм модуль с нативными функциями
-* ?
-* ждать возможность использовать `std::net::TcpSocket`
+## Modules
+* [`examples/entry`](examples/entry/) - an example shows how to use bindings to access FiveM.
+* [`bindings`](bindings/) - Rust bindings to WASM runtime to create mods.
+* [`glue`](glue/) - a crate that builds as a static library used by the FiveM component.
+* [`runtime`](runtime/) - implementation of wasmtime
+* [`standalone`](standalone/) - not used
+
+## Building
+* Install [the Rust compiler](https://rust-lang.org) and WASM toolchain (wasm32-wasi)
+* Install `cargo-wasi` to build example or your scripts.
+* Clone the FiveM fork with all submodules (including this repo).
+* Build `vendor/fivem-wasm` with flag `--package cfx-component-glue`
+* Use [this guide to build FiveM](https://github.com/citizenfx/fivem/blob/master/docs/building.md).
+* Enjoy WASM in your FiveM server!
+
+## TODOs
+* Implement `IScriptRefRuntime`.
+* Cleanup the code (handling `Result` over `unwrap` it, refactor `runtime` module).
+* A generator for FiveM natives functions.
+* Describe a calling convention between the host and WASM modules (to use any language compiling in WASM).
+* Maybe something else that I forgot ...
+* Wait till there will be ability to use `std::net::TcpStream` and othe net utils to build a good server.

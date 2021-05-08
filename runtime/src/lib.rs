@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use fivem_bindings::types::ReturnTypes;
+use fivem::types::ReturnTypes;
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
@@ -180,15 +180,13 @@ impl ScriptModule {
                         ReturnTypes::String => ctx.arguments[0] as _,
 
                         ReturnTypes::Vector3 => {
-                            let vec =
-                                ctx.arguments.as_ptr() as *const fivem_bindings::types::Vector3;
+                            let vec = ctx.arguments.as_ptr() as *const fivem::types::Vector3;
 
                             Self::alloc_value(&caller, unsafe { &*vec }).0 as _
                         }
 
                         ReturnTypes::MsgPack => {
-                            let scrobj =
-                                ctx.arguments.as_ptr() as *const fivem_bindings::types::ScrObject;
+                            let scrobj = ctx.arguments.as_ptr() as *const fivem::types::ScrObject;
 
                             let scrobj = unsafe { &*scrobj };
                             let bytes = unsafe {
@@ -200,7 +198,7 @@ impl ScriptModule {
 
                             let (ptr, _) = Self::alloc_vec(&caller, bytes);
 
-                            let scrobj = fivem_bindings::types::ScrObject {
+                            let scrobj = fivem::types::ScrObject {
                                 data: ptr as _,
                                 length: scrobj.length,
                             };

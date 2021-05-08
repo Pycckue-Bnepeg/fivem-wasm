@@ -1,5 +1,5 @@
 [package]
-name = "fivem-bindings"
+name = "fivem"
 version = "0.1.0"
 authors = ["ZOTTCE <zottce@gmail.com>"]
 edition = "2018"
