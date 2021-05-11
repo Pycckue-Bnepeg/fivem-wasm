@@ -38,7 +38,7 @@ struct Commands {
 
 fn registered_commands() -> Vec<Commands> {
     // 0xD4BEF069
-    let list: Packed<Vec<Commands>> = fivem::invoker::invoke(0xD4BEF069, &[]);
+    let list: Packed<Vec<Commands>> = fivem::invoker::invoke(0xD4BEF069, &[]).unwrap();
     list.into_inner()
 }
 

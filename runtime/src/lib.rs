@@ -1,8 +1,10 @@
 use std::ffi::CStr;
 
-use fivem::types::ReturnTypes;
+use fivem::types::{ReturnType, ReturnValue, Vector3};
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
+
+// mod walloc;
 
 pub type LogFunc = extern "C" fn(message: *const i8);
 pub type InvokeFunc = extern "C" fn(ctx: *mut NativeContext);
@@ -132,12 +134,12 @@ impl ScriptModule {
             .func(
                 "host",
                 "invoke",
-                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, rettype: i32| -> i32 {
+                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, retval: i32| -> i32 {
                     // array ptr, array len
                     let mut buf = vec![0u32; len as usize];
                     let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
 
-                    if len > 0 {
+                    if len > 0 && ptr != 0 {
                         let tmp = unsafe {
                             let ptr = buf.as_mut_ptr() as *mut u8;
                             std::slice::from_raw_parts_mut(
@@ -152,61 +154,23 @@ impl ScriptModule {
                     let h1 = h1 as u32;
                     let h2 = h2 as u32;
                     let hash = ((h1 as u64) << 32) + (h2 as u64);
-                    let mut ctx = NativeContext::default();
 
-                    ctx.native_identifier = hash;
-                    ctx.num_arguments = len as _;
+                    let retval = if retval == 0 {
+                        None
+                    } else {
+                        Some(unsafe {
+                            let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
+                            &*ptr
+                        })
+                    };
 
-                    for (idx, &offset) in buf.iter().enumerate() {
-                        unsafe {
-                            let mem_start = mem.data_unchecked().as_ptr();
-                            ctx.arguments[idx] = mem_start.offset(offset as isize) as usize;
-                        };
-                    }
+                    let call_result = call_native(hash, buf.as_slice(), mem, retval);
 
-                    if let Some(invoke) = unsafe { INVOKE } {
-                        invoke(&mut ctx);
-                    }
-
-                    if ctx.num_results == 0 {
-                        return 0;
-                    }
-
-                    let rettype = ReturnTypes::from(rettype as u32);
-
-                    match rettype {
-                        ReturnTypes::Empty => 0,
-                        ReturnTypes::Number => ctx.arguments[0] as _,
-                        ReturnTypes::String => ctx.arguments[0] as _,
-
-                        ReturnTypes::Vector3 => {
-                            let vec = ctx.arguments.as_ptr() as *const fivem::types::Vector3;
-
-                            Self::alloc_value(&caller, unsafe { &*vec }).0 as _
-                        }
-
-                        ReturnTypes::MsgPack => {
-                            let scrobj = ctx.arguments.as_ptr() as *const fivem::types::ScrObject;
-
-                            let scrobj = unsafe { &*scrobj };
-                            let bytes = unsafe {
-                                std::slice::from_raw_parts(
-                                    scrobj.data as *const u8,
-                                    scrobj.length as _,
-                                )
-                            };
-
-                            let (ptr, _) = Self::alloc_vec(&caller, bytes);
-
-                            let scrobj = fivem::types::ScrObject {
-                                data: ptr as _,
-                                length: scrobj.length,
-                            };
-
-                            Self::alloc_value(&caller, &scrobj).0 as _
-                        }
-
-                        ReturnTypes::Unk => 0,
+                    match call_result {
+                        CallResult::NoReturn => -2,
+                        CallResult::NoSpace => -1,
+                        CallResult::OkWithLen(len) => len as _,
+                        CallResult::Ok => 0,
                     }
                 },
             )
@@ -225,45 +189,6 @@ impl ScriptModule {
             instance,
             on_event,
         }
-    }
-
-    // TODO: Make an allocation module?
-    fn alloc_value<T: Sized>(caller: &Caller, value: &T) -> (u32, std::alloc::Layout) {
-        let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
-        let malloc = caller.get_export("__alloc").unwrap().into_func().unwrap();
-        let malloc = malloc.typed::<(i32, u32), u32>().unwrap();
-
-        let layout = std::alloc::Layout::new::<T>();
-
-        let data_ptr = malloc
-            .call((layout.size() as _, layout.align() as _))
-            .unwrap();
-
-        unsafe {
-            let mem = mem.data_ptr().add(data_ptr as _) as *mut T;
-            std::ptr::copy(value, mem, 1);
-        }
-
-        return (data_ptr, layout);
-    }
-
-    fn alloc_vec<T: Sized>(caller: &Caller, value: &[T]) -> (u32, std::alloc::Layout) {
-        let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
-        let malloc = caller.get_export("__alloc").unwrap().into_func().unwrap();
-        let malloc = malloc.typed::<(i32, u32), u32>().unwrap();
-
-        let layout = std::alloc::Layout::array::<T>(value.len()).unwrap();
-
-        let data_ptr = malloc
-            .call((layout.size() as _, layout.align() as _))
-            .unwrap();
-
-        unsafe {
-            let mem = mem.data_ptr().add(data_ptr as _) as *mut T;
-            std::ptr::copy(value.as_ptr(), mem, value.len());
-        }
-
-        return (data_ptr, layout);
     }
 
     fn alloc_bytes(&self, bytes: &[u8]) -> (u32, usize) {
@@ -300,4 +225,111 @@ pub fn set_native_invoke(invoke: extern "C" fn(ctx: *mut std::ffi::c_void)) {
     unsafe {
         INVOKE = Some(std::mem::transmute(invoke));
     }
+}
+
+enum CallResult {
+    NoReturn,
+    NoSpace,
+    OkWithLen(u32),
+    Ok,
+}
+
+fn call_native(
+    hash: u64,
+    args: &[u32],
+    memory: Memory,
+    retval: Option<&ReturnValue>,
+) -> CallResult {
+    let mut ctx = NativeContext::default();
+
+    ctx.native_identifier = hash;
+    ctx.num_arguments = args.len() as _;
+
+    let mem_start = unsafe { memory.data_unchecked().as_ptr() };
+
+    for (idx, &offset) in args.iter().enumerate() {
+        unsafe {
+            ctx.arguments[idx] = mem_start.offset(offset as isize) as usize;
+        };
+    }
+
+    if let Some(invoke) = unsafe { INVOKE } {
+        invoke(&mut ctx);
+    }
+
+    if ctx.num_results == 0 || retval.is_none() {
+        return CallResult::Ok;
+    }
+
+    if let Some(retval) = retval {
+        let buffer = unsafe { memory.data_ptr().add(retval.buffer as _) };
+        let rettype = ReturnType::from(retval.rettype as u32);
+
+        match rettype {
+            ReturnType::Empty => CallResult::Ok,
+            ReturnType::Number => {
+                if retval.capacity < 4 {
+                    return CallResult::NoSpace;
+                }
+
+                unsafe {
+                    *(buffer as *mut u32) = ctx.arguments[0] as u32;
+                }
+
+                return CallResult::OkWithLen(4);
+            }
+
+            ReturnType::String => {
+                let cstr = unsafe { CStr::from_ptr(ctx.arguments[0] as *const _) };
+                let bytes = cstr.to_bytes();
+                let len = bytes.len();
+
+                if retval.capacity < len as _ {
+                    return CallResult::NoSpace;
+                }
+
+                unsafe {
+                    std::ptr::copy(bytes.as_ptr(), buffer, len);
+                }
+
+                CallResult::OkWithLen(len as _)
+            }
+
+            ReturnType::Vector3 => {
+                let vec = ctx.arguments.as_ptr() as *const Vector3;
+                let len = std::mem::size_of::<Vector3>();
+
+                if retval.capacity < len as _ {
+                    return CallResult::NoSpace;
+                }
+
+                unsafe {
+                    std::ptr::copy(vec, buffer as *mut _, 1);
+                }
+
+                return CallResult::OkWithLen(len as _);
+            }
+
+            ReturnType::MsgPack => {
+                let scrobj =
+                    unsafe { &*(ctx.arguments.as_ptr() as *const fivem::types::ScrObject) };
+
+                let len = scrobj.length;
+
+                if (retval.capacity as u64) < len {
+                    return CallResult::NoSpace;
+                }
+
+                unsafe {
+                    std::ptr::copy(scrobj.data as *const u8, buffer, len as _);
+                }
+
+                return CallResult::OkWithLen(len as _);
+            }
+
+            ReturnType::Unk => CallResult::NoReturn,
+        };
+    }
+
+    CallResult::NoReturn
 }

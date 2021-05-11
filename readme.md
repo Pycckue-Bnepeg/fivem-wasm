@@ -28,6 +28,6 @@ Also there is a question. Should it be BA's `wasmtime` or Parity's `wasmi`? Curr
 * Implement `IScriptRefRuntime`.
 * Cleanup the code (handling `Result` over `unwrap` it, refactor `runtime` module).
 * A generator for FiveM natives functions.
-* Describe a calling convention between the host and WASM modules (to use any language compiling in WASM).
+* Describe a calling convention between the host and WASM modules (to use any language compiling in WASM). `.witx`, `witx-bindgen`, `wiggle`?
 * Maybe something else that I forgot ...
 * Wait till there will be ability to use `std::net::TcpStream` and othe net utils to build a good server.

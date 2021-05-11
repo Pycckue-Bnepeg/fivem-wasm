@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-pub enum ReturnTypes {
+pub enum ReturnType {
     Empty = 0,
     Number,
     String,
@@ -12,15 +12,32 @@ pub enum ReturnTypes {
     Unk,
 }
 
-impl From<u32> for ReturnTypes {
+impl From<u32> for ReturnType {
     fn from(val: u32) -> Self {
         match val {
-            0 => ReturnTypes::Empty,
-            1 => ReturnTypes::Number,
-            2 => ReturnTypes::String,
-            3 => ReturnTypes::Vector3,
-            4 => ReturnTypes::MsgPack,
-            _ => ReturnTypes::Unk,
+            0 => ReturnType::Empty,
+            1 => ReturnType::Number,
+            2 => ReturnType::String,
+            3 => ReturnType::Vector3,
+            4 => ReturnType::MsgPack,
+            _ => ReturnType::Unk,
+        }
+    }
+}
+
+#[repr(C)]
+pub struct ReturnValue {
+    pub rettype: ReturnType,
+    pub buffer: u32, // ptr
+    pub capacity: u32,
+}
+
+impl ReturnValue {
+    pub unsafe fn new<T: RetVal>(buf: &Vec<u8>) -> ReturnValue {
+        ReturnValue {
+            rettype: T::IDENT as _,
+            buffer: buf.as_ptr() as _,
+            capacity: buf.capacity() as _,
         }
     }
 }
@@ -60,74 +77,57 @@ impl<T: DeserializeOwned> Packed<T> {
 }
 
 unsafe impl RetVal for () {
-    const IDENT: ReturnTypes = ReturnTypes::Empty;
+    const IDENT: ReturnType = ReturnType::Empty;
 
-    unsafe fn convert(_: *mut u8) -> Self {
+    unsafe fn convert(_: &[u8]) -> Self {
         ()
     }
 }
 
 unsafe impl RetVal for f32 {
-    const IDENT: ReturnTypes = ReturnTypes::Number;
+    const IDENT: ReturnType = ReturnType::Number;
 
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        std::mem::transmute(bytes as usize as u32)
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const f32).read()
     }
 }
 
 unsafe impl RetVal for u32 {
-    const IDENT: ReturnTypes = ReturnTypes::Number;
+    const IDENT: ReturnType = ReturnType::Number;
 
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        bytes as u32
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const u32).read()
     }
 }
 
 unsafe impl RetVal for String {
-    const IDENT: ReturnTypes = ReturnTypes::String;
+    const IDENT: ReturnType = ReturnType::String;
 
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        let cstr = std::ffi::CStr::from_ptr(bytes as *const _);
-        cstr.to_str().unwrap().to_owned()
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        std::str::from_utf8_unchecked(bytes).to_owned()
     }
 }
 
-unsafe impl RetVal for Box<Vector3> {
-    const IDENT: ReturnTypes = ReturnTypes::Vector3;
+unsafe impl RetVal for Vector3 {
+    const IDENT: ReturnType = ReturnType::Vector3;
 
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        Box::from_raw(bytes as _)
-    }
-}
-
-unsafe impl RetVal for Box<ScrObject> {
-    const IDENT: ReturnTypes = ReturnTypes::MsgPack;
-
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        Box::from_raw(bytes as _)
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const Vector3).read()
     }
 }
 
 #[cfg(feature = "full")]
 unsafe impl<T: DeserializeOwned> RetVal for Packed<T> {
-    const IDENT: ReturnTypes = ReturnTypes::MsgPack;
+    const IDENT: ReturnType = ReturnType::MsgPack;
 
-    unsafe fn convert(bytes: *mut u8) -> Self {
-        let scrobj: Box<ScrObject> = Box::from_raw(bytes as _);
-        let bytes = Vec::from_raw_parts(
-            scrobj.data as *mut u8,
-            scrobj.length as _,
-            scrobj.length as _,
-        );
-
-        let inner = rmp_serde::from_read_ref(bytes.as_slice()).unwrap();
-
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        let inner = rmp_serde::from_read_ref(bytes).unwrap();
         Packed { inner }
     }
 }
 
 pub unsafe trait RetVal {
-    const IDENT: ReturnTypes;
+    const IDENT: ReturnType;
 
-    unsafe fn convert(bytes: *mut u8) -> Self;
+    unsafe fn convert(bytes: &[u8]) -> Self;
 }

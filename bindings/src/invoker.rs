@@ -1,10 +1,16 @@
-use crate::types::RetVal;
+use crate::types::{RetVal, ReturnValue};
+
+const RETVAL_BUFFER_SIZE: usize = 1 << 15;
+
+thread_local! {
+    static RETVAL_BUFFER: Vec<u8> = Vec::with_capacity(RETVAL_BUFFER_SIZE);
+}
 
 #[doc(hidden)]
 pub mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
-        pub fn invoke(hash_hi: i32, hash_lo: i32, ptr: i32, len: i32, rettype: i32) -> i32;
+        pub fn invoke(hash_hi: i32, hash_lo: i32, ptr: i32, len: i32, retval: i32) -> i32;
     }
 }
 
@@ -16,8 +22,13 @@ pub enum Val<'a> {
     Bytes(&'a [u8]),
 }
 
+#[derive(Debug, Clone)]
+pub enum InvokeError {
+    NoSpace,
+}
+
 // TODO: Result<Ret, ()>
-pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Ret
+pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Result<Ret, InvokeError>
 where
     Ret: RetVal,
     Args: IntoIterator<Item = &'a Val<'a>>,
@@ -54,21 +65,29 @@ where
         }
     }
 
-    unsafe {
-        let ret = ffi::invoke(
+    RETVAL_BUFFER.with(|buf| unsafe {
+        let retval = ReturnValue::new::<Ret>(buf);
+
+        let ret_len = ffi::invoke(
             hash_hi,
             hash_lo,
             args.as_ptr() as _,
             args.len() as _,
-            Ret::IDENT as i32,
+            (&retval) as *const _ as i32,
         );
 
-        Ret::convert(ret as *mut u8)
-    }
+        if ret_len == -1 {
+            return Err(InvokeError::NoSpace);
+        }
+
+        let read_buf = std::slice::from_raw_parts(buf.as_ptr(), ret_len as usize);
+
+        Ok(Ret::convert(read_buf))
+    })
 }
 
 /// A FiveM runtime native. Registers current resource as an event handler.
 /// Means that if someone triggers an event with this name the resource will be notified.
 pub fn register_resource_as_event_handler(event: &str) {
-    invoke::<(), _>(0xD233A168, &[Val::String(event)]);
+    let _ = invoke::<(), _>(0xD233A168, &[Val::String(event)]);
 }
