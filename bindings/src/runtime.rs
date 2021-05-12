@@ -19,7 +19,7 @@ pub fn spawn<Fut: Future<Output = ()> + 'static>(future: Fut) -> Result<(), Spaw
 
 #[doc(hidden)]
 #[no_mangle]
-pub extern "C" fn on_tick() {
+pub extern "C" fn __cfx_on_tick() {
     LOCAL_POOL.with(|lp| {
         let mut lp = lp.borrow_mut();
         lp.run_until_stalled();

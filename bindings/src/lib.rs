@@ -6,6 +6,8 @@ pub mod exports;
 #[cfg(feature = "full")]
 pub mod invoker;
 #[cfg(feature = "full")]
+pub mod ref_funcs;
+#[cfg(feature = "full")]
 pub mod runtime;
 #[cfg(feature = "types")]
 pub mod types;

@@ -26,6 +26,7 @@ Also there is a question. Should it be BA's `wasmtime` or Parity's `wasmi`? Curr
 
 ## TODOs
 * Implement `IScriptRefRuntime`.
+* Get rid of runtime allocations.
 * Cleanup the code (handling `Result` over `unwrap` it, refactor `runtime` module).
 * A generator for FiveM natives functions.
 * Describe a calling convention between the host and WASM modules (to use any language compiling in WASM). `.witx`, `witx-bindgen`, `wiggle`?

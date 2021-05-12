@@ -6,8 +6,9 @@ use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
 // mod walloc;
 
-pub type LogFunc = extern "C" fn(message: *const i8);
-pub type InvokeFunc = extern "C" fn(ctx: *mut NativeContext);
+pub type LogFunc = extern "C" fn(msg: *const i8);
+pub type InvokeFunc = extern "C" fn(args: *mut NativeContext) -> u32;
+pub type CanonicalizeRefFunc = extern "C" fn(ref_idx: u32, canon: *const *mut i8) -> u32;
 
 #[repr(C)]
 #[derive(Default)]
@@ -20,6 +21,7 @@ pub struct NativeContext {
 
 static mut LOGGER: Option<LogFunc> = None;
 static mut INVOKE: Option<InvokeFunc> = None;
+static mut CANONICALIZE_REF: Option<CanonicalizeRefFunc> = None;
 
 pub struct Runtime {
     engine: Engine,
@@ -68,7 +70,40 @@ impl Runtime {
         }
     }
 
+    // TODO: call on_tick
     pub fn tick(&mut self) {}
+
+    pub fn call_ref(&mut self, ref_idx: u32, args: &[u8], ret_buf: &mut [u8]) -> u32 {
+        self.script
+            .as_ref()
+            .and_then(|script| call_call_ref(script, ref_idx, args, ret_buf))
+            .unwrap_or_default()
+    }
+
+    pub fn duplicate_ref(&mut self, ref_idx: u32) -> u32 {
+        self.script
+            .as_ref()
+            .and_then(|script| {
+                let func = script
+                    .instance
+                    .get_typed_func::<i32, i32>("__cfx_duplicate_ref")
+                    .ok()?;
+
+                func.call(ref_idx as _).map(|idx| idx as _).ok()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn remove_ref(&mut self, ref_idx: u32) {
+        self.script.as_ref().and_then(|script| {
+            let func = script
+                .instance
+                .get_typed_func::<i32, ()>("__cfx_remove_ref")
+                .ok()?;
+
+            func.call(ref_idx as _).ok()
+        });
+    }
 
     pub fn memory_size(&self) -> u32 {
         self.script
@@ -91,7 +126,7 @@ impl ScriptModule {
         let module = Module::new(engine, bytes).unwrap();
 
         let instance = Instance::new(&store, &module, &[]).unwrap();
-        let on_event = instance.get_func("on_event");
+        let on_event = instance.get_func("__cfx_on_event");
 
         ScriptModule {
             store,
@@ -194,7 +229,7 @@ impl ScriptModule {
     fn alloc_bytes(&self, bytes: &[u8]) -> (u32, usize) {
         let malloc = self
             .instance
-            .get_typed_func::<(i32, u32), u32>("__alloc")
+            .get_typed_func::<(i32, u32), u32>("__cfx_alloc")
             .unwrap();
 
         let data_ptr = malloc.call((bytes.len() as _, 1)).unwrap();
@@ -208,7 +243,7 @@ impl ScriptModule {
     fn free_bytes(&self, (offset, length): (u32, usize)) {
         let free = self
             .instance
-            .get_typed_func::<(u32, u32, u32), ()>("__free")
+            .get_typed_func::<(u32, u32, u32), ()>("__cfx_free")
             .unwrap();
 
         free.call((offset as _, length as _, 1)).unwrap();
@@ -221,9 +256,15 @@ pub fn set_logger(log: LogFunc) {
     }
 }
 
-pub fn set_native_invoke(invoke: extern "C" fn(ctx: *mut std::ffi::c_void)) {
+pub fn set_native_invoke(invoke: extern "C" fn(ctx: *mut std::ffi::c_void) -> u32) {
     unsafe {
         INVOKE = Some(std::mem::transmute(invoke));
+    }
+}
+
+pub fn set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
+    unsafe {
+        CANONICALIZE_REF = Some(canonicalize_ref);
     }
 }
 
@@ -332,4 +373,43 @@ fn call_native(
     }
 
     CallResult::NoReturn
+}
+
+// TODO: dealloc
+fn call_call_ref(
+    script: &ScriptModule,
+    ref_idx: u32,
+    args: &[u8],
+    ret_buf: &mut [u8],
+) -> Option<u32> {
+    let cfx_call_ref = script
+        .instance
+        .get_typed_func::<(i32, i32, i32, i32, i32), i32>("__cfx_call_ref")
+        .ok()?;
+
+    let args_guest = script.alloc_bytes(args);
+    let ret_guest = script.alloc_bytes(ret_buf);
+
+    let bytes_written = cfx_call_ref
+        .call((
+            ref_idx as _,
+            args_guest.0 as _,
+            args.len() as _,
+            ret_guest.0 as _,
+            ret_buf.len() as _,
+        ))
+        .ok()?;
+
+    script.free_bytes(args_guest);
+
+    if bytes_written > 0 && (bytes_written as usize) <= ret_buf.len() {
+        let memory = script.instance.get_memory("memory")?;
+        memory
+            .read(ret_guest.0 as _, &mut ret_buf[0..bytes_written as usize])
+            .ok()?;
+    }
+
+    script.free_bytes(ret_guest);
+
+    None
 }

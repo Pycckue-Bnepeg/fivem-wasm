@@ -22,7 +22,7 @@ thread_local! {
 
 #[doc(hidden)]
 #[no_mangle]
-pub unsafe extern "C" fn on_event(
+pub unsafe extern "C" fn __cfx_on_event(
     cstring: *const i8,
     args: *const u8,
     args_length: u32,

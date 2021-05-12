@@ -1,7 +1,8 @@
 use std::ffi::{c_void, CStr};
 
 pub type LogFunc = extern "C" fn(msg: *const i8);
-pub type InvokeFunc = extern "C" fn(args: *mut c_void);
+pub type InvokeFunc = extern "C" fn(args: *mut c_void) -> u32;
+pub type CanonicalizeRefFunc = extern "C" fn(ref_idx: u32, canon: *const *mut i8) -> u32;
 
 #[no_mangle]
 pub extern "C" fn wasm_create_runtime() -> *mut c_void {
@@ -71,4 +72,37 @@ pub unsafe extern "C" fn wasm_runtime_memory_usage(runtime: *mut c_void) -> u32 
 #[no_mangle]
 pub unsafe extern "C" fn wasm_set_invoke_native(invoke: InvokeFunc) {
     cfx_wasm_runtime::set_native_invoke(invoke);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
+    cfx_wasm_runtime::set_canonicalize_ref(canonicalize_ref);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_runtime_call_ref(
+    runtime: *mut c_void,
+    ref_idx: u32,
+    args: *const u8,
+    args_len: u32,
+    retval: *mut u8,
+    retval_cap: u32,
+) -> u32 {
+    let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
+    let args = std::slice::from_raw_parts(args, args_len as _);
+    let ret_buf = std::slice::from_raw_parts_mut(retval, retval_cap as _);
+
+    runtime.call_ref(ref_idx, args, ret_buf)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_runtime_duplicate_ref(runtime: *mut c_void, ref_idx: u32) -> u32 {
+    let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
+    runtime.duplicate_ref(ref_idx)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn wasm_runtime_remove_ref(runtime: *mut c_void, ref_idx: u32) {
+    let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
+    runtime.remove_ref(ref_idx);
 }
