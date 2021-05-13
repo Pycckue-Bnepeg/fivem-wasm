@@ -18,7 +18,6 @@ thread_local! {
 
 #[no_mangle]
 #[doc(hidden)]
-// TODO: Add return value
 pub unsafe extern "C" fn __cfx_call_ref(
     ref_idx: u32,
     args: *const u8,
@@ -31,7 +30,23 @@ pub unsafe extern "C" fn __cfx_call_ref(
 
         if let Some(handler) = handlers.get(&ref_idx) {
             let mut handler = handler.borrow_mut();
-            handler.handle(args);
+
+            BUFFER.with(|buf| {
+                let mut buf = buf.borrow_mut();
+
+                unsafe {
+                    buf.set_len(0);
+                }
+
+                handler.handle(args, &mut buf);
+
+                RETVAL.with(|retval| {
+                    let mut retval = retval.borrow_mut();
+
+                    retval.data = buf.as_ptr() as _;
+                    retval.length = buf.len() as _;
+                });
+            });
         }
     });
 
@@ -109,13 +124,13 @@ fn canonicalize_ref(ref_idx: u32) -> String {
 
 struct InnerRefFunction {
     idx: u32,
-    func: Box<dyn FnMut(&[u8]) -> Vec<u8>>,
+    func: Box<dyn FnMut(&[u8], &mut Vec<u8>)>,
     refs: i32,
 }
 
 impl InnerRefFunction {
-    fn handle(&mut self, input: &[u8]) -> Vec<u8> {
-        (self.func)(input)
+    fn handle(&mut self, input: &[u8], output: &mut Vec<u8>) {
+        (self.func)(input, output);
     }
 }
 
@@ -144,10 +159,10 @@ impl RefFunction {
 
         let name = canonicalize_ref(idx);
 
-        let func = move |input: &[u8]| -> Vec<u8> {
+        let func = move |input: &[u8], out_buf: &mut Vec<u8>| {
             let input = rmp_serde::decode::from_read(input).unwrap();
             let out = handler(input);
-            rmp_serde::encode::to_vec(&out).unwrap()
+            let _ = rmp_serde::encode::write_named(out_buf, &out);
         };
 
         let inner = InnerRefFunction {
