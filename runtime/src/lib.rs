@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use fivem::types::{ReturnType, ReturnValue, Vector3};
+use fivem::types::{ReturnType, ReturnValue, ScrObject, Vector3};
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
@@ -73,7 +73,7 @@ impl Runtime {
     // TODO: call on_tick
     pub fn tick(&mut self) {}
 
-    pub fn call_ref(&mut self, ref_idx: u32, args: &[u8], ret_buf: &mut [u8]) -> u32 {
+    pub fn call_ref(&mut self, ref_idx: u32, args: &[u8], ret_buf: &mut Vec<u8>) -> u32 {
         self.script
             .as_ref()
             .and_then(|script| call_call_ref(script, ref_idx, args, ret_buf))
@@ -199,7 +199,11 @@ impl ScriptModule {
                         })
                     };
 
-                    let call_result = call_native(hash, buf.as_slice(), mem, retval);
+                    let resize_func = caller
+                        .get_export("__cfx_extend_retval_buffer")
+                        .and_then(|export| export.into_func());
+
+                    let call_result = call_native(hash, buf.as_slice(), mem, retval, resize_func);
 
                     match call_result {
                         CallResult::NoReturn => -2,
@@ -215,7 +219,7 @@ impl ScriptModule {
         let instance = linker.instantiate(&module).unwrap();
 
         let start = instance.get_func("_start").expect("no _start entry");
-        let on_event = instance.get_func("on_event");
+        let on_event = instance.get_func("__cfx_on_event");
 
         start.call(&[]).unwrap();
 
@@ -280,6 +284,7 @@ fn call_native(
     args: &[u32],
     memory: Memory,
     retval: Option<&ReturnValue>,
+    resize_func: Option<Func>,
 ) -> CallResult {
     let mut ctx = NativeContext::default();
 
@@ -303,14 +308,34 @@ fn call_native(
     }
 
     if let Some(retval) = retval {
-        let buffer = unsafe { memory.data_ptr().add(retval.buffer as _) };
+        let resize_buffer = |new_size: usize| -> Option<*mut u8> {
+            if let Some(resizer) = resize_func.as_ref() {
+                let ptr = resizer.call(&[Val::I32(new_size as _)]).ok()?;
+
+                ptr.get(0).and_then(|val| val.i32()).and_then(|ptr| {
+                    if ptr == 0 {
+                        None
+                    } else {
+                        Some(unsafe { memory.data_ptr().add(ptr as _) })
+                    }
+                })
+            } else {
+                None
+            }
+        };
+
+        let mut buffer = unsafe { memory.data_ptr().add(retval.buffer as _) };
         let rettype = ReturnType::from(retval.rettype as u32);
 
         match rettype {
             ReturnType::Empty => CallResult::Ok,
             ReturnType::Number => {
                 if retval.capacity < 4 {
-                    return CallResult::NoSpace;
+                    if let Some(new_buffer) = resize_buffer(4) {
+                        buffer = new_buffer
+                    } else {
+                        return CallResult::NoSpace;
+                    }
                 }
 
                 unsafe {
@@ -326,7 +351,11 @@ fn call_native(
                 let len = bytes.len();
 
                 if retval.capacity < len as _ {
-                    return CallResult::NoSpace;
+                    if let Some(new_buffer) = resize_buffer(len) {
+                        buffer = new_buffer
+                    } else {
+                        return CallResult::NoSpace;
+                    }
                 }
 
                 unsafe {
@@ -341,7 +370,11 @@ fn call_native(
                 let len = std::mem::size_of::<Vector3>();
 
                 if retval.capacity < len as _ {
-                    return CallResult::NoSpace;
+                    if let Some(new_buffer) = resize_buffer(len) {
+                        buffer = new_buffer
+                    } else {
+                        return CallResult::NoSpace;
+                    }
                 }
 
                 unsafe {
@@ -358,7 +391,11 @@ fn call_native(
                 let len = scrobj.length;
 
                 if (retval.capacity as u64) < len {
-                    return CallResult::NoSpace;
+                    if let Some(new_buffer) = resize_buffer(len as usize) {
+                        buffer = new_buffer
+                    } else {
+                        return CallResult::NoSpace;
+                    }
                 }
 
                 unsafe {
@@ -375,41 +412,57 @@ fn call_native(
     CallResult::NoReturn
 }
 
-// TODO: dealloc
 fn call_call_ref(
     script: &ScriptModule,
     ref_idx: u32,
     args: &[u8],
-    ret_buf: &mut [u8],
+    ret_buf: &mut Vec<u8>,
 ) -> Option<u32> {
+    let memory = script.instance.get_memory("memory")?;
     let cfx_call_ref = script
         .instance
-        .get_typed_func::<(i32, i32, i32, i32, i32), i32>("__cfx_call_ref")
+        .get_typed_func::<(i32, i32, i32), i32>("__cfx_call_ref")
         .ok()?;
 
     let args_guest = script.alloc_bytes(args);
-    let ret_guest = script.alloc_bytes(ret_buf);
 
-    let bytes_written = cfx_call_ref
-        .call((
-            ref_idx as _,
-            args_guest.0 as _,
-            args.len() as _,
-            ret_guest.0 as _,
-            ret_buf.len() as _,
-        ))
-        .ok()?;
+    let scrobj = {
+        let result = cfx_call_ref
+            .call((ref_idx as _, args_guest.0 as _, args.len() as _))
+            .ok();
 
-    script.free_bytes(args_guest);
+        script.free_bytes(args_guest);
 
-    if bytes_written > 0 && (bytes_written as usize) <= ret_buf.len() {
-        let memory = script.instance.get_memory("memory")?;
-        memory
-            .read(ret_guest.0 as _, &mut ret_buf[0..bytes_written as usize])
-            .ok()?;
+        result?
+    };
+
+    if scrobj == 0 {
+        return None;
     }
 
-    script.free_bytes(ret_guest);
+    let scrobj = unsafe {
+        let ptr = memory.data_ptr().add(scrobj as _) as *const ScrObject;
+        &*ptr
+    };
 
-    None
+    unsafe {
+        ret_buf.set_len(0);
+    }
+
+    if scrobj.data == 0 || scrobj.length == 0 {
+        return None;
+    }
+
+    let slice = unsafe {
+        let ptr = memory.data_ptr().add(scrobj.data as _);
+        std::slice::from_raw_parts(ptr, scrobj.length as _)
+    };
+
+    ret_buf.extend_from_slice(slice);
+
+    // if scrobj.length > ret_buf.capacity() as _ {
+    //     ret_buf.resize(scrobj.length as usize, 0);
+    // }
+
+    Some(ret_buf.len() as _)
 }

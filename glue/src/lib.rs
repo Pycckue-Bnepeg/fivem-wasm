@@ -85,14 +85,26 @@ pub unsafe extern "C" fn wasm_runtime_call_ref(
     ref_idx: u32,
     args: *const u8,
     args_len: u32,
-    retval: *mut u8,
-    retval_cap: u32,
+    ret: *mut *const u8,
+    ret_size: *mut u32,
 ) -> u32 {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static RETVAL: RefCell<Vec<u8>> = RefCell::new(vec![0; 1 << 15]);
+    }
+
     let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
     let args = std::slice::from_raw_parts(args, args_len as _);
-    let ret_buf = std::slice::from_raw_parts_mut(retval, retval_cap as _);
 
-    runtime.call_ref(ref_idx, args, ret_buf)
+    RETVAL.with(|retval| {
+        let written = runtime.call_ref(ref_idx, args, &mut retval.borrow_mut());
+
+        *ret = retval.borrow().as_ptr();
+        *ret_size = written;
+
+        written
+    })
 }
 
 #[no_mangle]

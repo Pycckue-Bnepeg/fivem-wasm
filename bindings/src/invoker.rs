@@ -1,17 +1,37 @@
 use crate::types::{RetVal, ReturnValue};
+use std::cell::RefCell;
 
 const RETVAL_BUFFER_SIZE: usize = 1 << 15;
 
 thread_local! {
-    static RETVAL_BUFFER: Vec<u8> = Vec::with_capacity(RETVAL_BUFFER_SIZE);
+    static RETVAL_BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; RETVAL_BUFFER_SIZE]);
 }
 
 #[doc(hidden)]
 pub mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
-        pub fn invoke(hash_hi: i32, hash_lo: i32, ptr: i32, len: i32, retval: i32) -> i32;
+        pub fn invoke(
+            hash_hi: i32,
+            hash_lo: i32,
+            ptr: *const u32,
+            len: usize,
+            retval: *const crate::types::ReturnValue,
+        ) -> i32;
     }
+}
+
+#[doc(hidden)]
+#[no_mangle]
+pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
+    crate::log(format!("request to resize with new size: {}", new_size));
+
+    RETVAL_BUFFER.with(|retval| {
+        let mut vec = retval.borrow_mut();
+        vec.resize(new_size, 0);
+
+        vec.as_ptr()
+    })
 }
 
 #[derive(Debug)]
@@ -66,21 +86,21 @@ where
     }
 
     RETVAL_BUFFER.with(|buf| unsafe {
-        let retval = ReturnValue::new::<Ret>(buf);
+        let retval = ReturnValue::new::<Ret>(&buf.borrow());
 
         let ret_len = ffi::invoke(
             hash_hi,
             hash_lo,
-            args.as_ptr() as _,
-            args.len() as _,
-            (&retval) as *const _ as i32,
+            args.as_ptr(),
+            args.len(),
+            (&retval) as *const _,
         );
 
         if ret_len == -1 {
             return Err(InvokeError::NoSpace);
         }
 
-        let read_buf = std::slice::from_raw_parts(buf.as_ptr(), ret_len as usize);
+        let read_buf = std::slice::from_raw_parts(buf.borrow().as_ptr(), ret_len as usize);
 
         Ok(Ret::convert(read_buf))
     })
