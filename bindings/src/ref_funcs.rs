@@ -1,5 +1,5 @@
 use crate::types::ScrObject;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[doc(hidden)]
@@ -131,6 +131,16 @@ struct InnerRefFunction {
 impl InnerRefFunction {
     fn handle(&mut self, input: &[u8], output: &mut Vec<u8>) {
         (self.func)(input, output);
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename = "_ExtStruct")]
+pub struct ExternRefFunction((u8, String));
+
+impl ExternRefFunction {
+    pub fn new(name: &str) -> ExternRefFunction {
+        ExternRefFunction((10, name.to_owned()))
     }
 }
 

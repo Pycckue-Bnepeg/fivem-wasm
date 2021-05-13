@@ -12,6 +12,12 @@ pub mod runtime;
 #[cfg(feature = "types")]
 pub mod types;
 
+#[cfg(feature = "client")]
+pub mod client;
+
+#[cfg(feature = "server")]
+pub mod server;
+
 #[cfg(feature = "full")]
 mod ffi {
     #[link(wasm_import_module = "host")]

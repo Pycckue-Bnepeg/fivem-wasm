@@ -6,12 +6,12 @@ $env:Path += ";C:\python27";
 # cargo build --release --package cfx-component-glue
 
 # так сказать local dev
-cargo wasi build --package entry --release
+cargo wasi build --package basic --release
 cargo build --package cfx-component-glue --release
 
 Copy-Item "E:\sources\projects\fivem-wasm\target\release\cfx_component_glue.lib" -Destination "E:\sources\c\fivem-fork\vendor\fivem-wasm\target\release\" -Force
 Copy-Item "E:\sources\projects\fivem-wasm\glue\cfx-wasm-runtime.h" -Destination "E:\sources\c\fivem-fork\vendor\fivem-wasm\glue\" -Force
-Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\entry.wasm" -Destination "E:\sources\c\fivem-fork\code\bin\server\windows\release\resources\main\" -Force
+Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\basic.wasm" -Destination "E:\sources\c\fivem-fork\code\bin\server\windows\release\resources\main\" -Force
 
 # Pop-Location -StackName FiveMWasm;
 

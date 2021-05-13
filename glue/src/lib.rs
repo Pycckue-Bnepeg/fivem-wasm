@@ -25,11 +25,17 @@ pub unsafe extern "C" fn wasm_runtime_create_module(
     runtime: *mut c_void,
     bytes: *const u8,
     length: u64,
-) {
+) -> bool {
     let runtime = &mut *(runtime as *mut cfx_wasm_runtime::Runtime);
     let bytes = std::slice::from_raw_parts(bytes, length as usize);
 
-    runtime.load_module(bytes, true);
+    match runtime.load_module(bytes, true) {
+        Ok(_) => true,
+        Err(err) => {
+            println!("WASM error: {:?}", err);
+            false
+        }
+    }
 }
 
 #[no_mangle]

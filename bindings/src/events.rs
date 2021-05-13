@@ -83,7 +83,7 @@ pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Ev
         events.insert(event_name.to_owned(), tx);
     });
 
-    crate::invoker::register_resource_as_event_handler(event_name);
+    let _ = crate::invoker::register_resource_as_event_handler(event_name);
 
     rx.filter_map(|event| async move {
         rmp_serde::from_read(event.payload.as_slice())

@@ -39,40 +39,55 @@ impl Runtime {
         }
     }
 
-    pub fn load_module(&mut self, bytes: &[u8], is_server: bool) {
-        let script = if is_server {
-            ScriptModule::new_with_wasi(&self.engine, bytes)
+    pub fn load_module(&mut self, bytes: &[u8], wasi: bool) -> anyhow::Result<()> {
+        let script = if wasi {
+            ScriptModule::new_with_wasi(&self.engine, bytes)?
         } else {
-            ScriptModule::new(&self.engine, bytes)
+            ScriptModule::new(&self.engine, bytes)?
         };
 
         self.script = Some(script);
+
+        Ok(())
     }
 
     pub fn trigger_event(&mut self, event_name: &CStr, args: &[u8], source: &CStr) {
         if let Some(script) = self.script.as_mut() {
-            if let Some(func) = &script.on_event {
-                let ev = script.alloc_bytes(event_name.to_bytes_with_nul());
-                let args = script.alloc_bytes(args);
-                let src = script.alloc_bytes(source.to_bytes_with_nul());
+            let wrapper = || -> Option<()> {
+                if let Some(func) = &script.on_event {
+                    let ev = script.alloc_bytes(event_name.to_bytes_with_nul())?;
+                    let args = script.alloc_bytes(args)?;
+                    let src = script.alloc_bytes(source.to_bytes_with_nul())?;
 
-                // event, args, args_len, src
-                let _ = func.call(&[
-                    Val::I32(ev.0 as _),
-                    Val::I32(args.0 as _),
-                    Val::I32(args.1 as _),
-                    Val::I32(src.0 as _),
-                ]);
+                    // event, args, args_len, src
+                    func.call(&[
+                        Val::I32(ev.0 as _),
+                        Val::I32(args.0 as _),
+                        Val::I32(args.1 as _),
+                        Val::I32(src.0 as _),
+                    ])
+                    .ok()?;
 
-                script.free_bytes(ev);
-                script.free_bytes(args);
-                script.free_bytes(src);
+                    script.free_bytes(ev)?;
+                    script.free_bytes(args)?;
+                    script.free_bytes(src)?;
+                }
+
+                Some(())
+            };
+
+            if wrapper().is_none() {
+                script_log(format!("__cfx_on_event error: it is not safe to continue"));
             }
         }
     }
 
-    // TODO: call on_tick
-    pub fn tick(&mut self) {}
+    pub fn tick(&mut self) {
+        self.script.as_ref().and_then(|script| {
+            let func = script.instance.get_func("__cfx_on_tick")?;
+            func.call(&[]).ok()
+        });
+    }
 
     pub fn call_ref(&mut self, ref_idx: u32, args: &[u8], ret_buf: &mut Vec<u8>) -> u32 {
         self.script
@@ -122,21 +137,21 @@ struct ScriptModule {
 }
 
 impl ScriptModule {
-    fn new(engine: &Engine, bytes: &[u8]) -> ScriptModule {
+    fn new(engine: &Engine, bytes: &[u8]) -> anyhow::Result<ScriptModule> {
         let store = Store::new(&engine);
-        let module = Module::new(engine, bytes).unwrap();
+        let module = Module::new(engine, bytes)?;
 
-        let instance = Instance::new(&store, &module, &[]).unwrap();
+        let instance = Instance::new(&store, &module, &[])?;
         let on_event = instance.get_func("__cfx_on_event");
 
-        ScriptModule {
+        Ok(ScriptModule {
             store,
             instance,
             on_event,
-        }
+        })
     }
 
-    fn new_with_wasi(engine: &Engine, bytes: &[u8]) -> ScriptModule {
+    fn new_with_wasi(engine: &Engine, bytes: &[u8]) -> anyhow::Result<ScriptModule> {
         let store = Store::new(&engine);
         let mut linker = Linker::new(&store);
 
@@ -146,132 +161,76 @@ impl ScriptModule {
                 .inherit_stdout()
                 .inherit_stdio()
                 .inherit_stderr()
-                .build()
-                .unwrap(),
+                .build()?,
         );
 
-        wasi.add_to_linker(&mut linker).unwrap();
+        wasi.add_to_linker(&mut linker)?;
 
-        linker
-            .func("host", "log", |caller: Caller, ptr: i32, len: i32| {
-                let mut buf = vec![0u8; len as usize];
-                let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
-                mem.read(ptr as _, buf.as_mut()).unwrap();
+        linker.func("host", "log", |caller: Caller, ptr: i32, len: i32| {
+            log(caller, ptr, len);
+        })?;
 
-                unsafe {
-                    if let Some(logger) = LOGGER {
-                        logger(buf.as_mut_ptr() as _);
+        linker.func(
+            "host",
+            "invoke",
+            |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, retval: i32| -> i32 {
+                match call_native_wrapper(caller, h1, h2, ptr, len, retval) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        script_log(format!("host::invoke error: {:?}", err));
+
+                        -1
                     }
                 }
-            })
-            .unwrap();
+            },
+        )?;
 
-        linker
-            .func(
-                "host",
-                "invoke",
-                |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, retval: i32| -> i32 {
-                    // array ptr, array len
-                    let mut buf = vec![0u32; len as usize];
-                    let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
+        linker.func(
+            "host",
+            "canonicalize_ref",
+            |caller: Caller, ref_idx: i32, ptr: i32, len: i32| {
+                canonicalize_ref(caller, ref_idx, ptr, len).unwrap_or(0)
+            },
+        )?;
 
-                    if len > 0 && ptr != 0 {
-                        let tmp = unsafe {
-                            let ptr = buf.as_mut_ptr() as *mut u8;
-                            std::slice::from_raw_parts_mut(
-                                ptr,
-                                len as usize * std::mem::size_of::<i32>(),
-                            )
-                        };
-
-                        mem.read(ptr as _, tmp).unwrap();
-                    }
-
-                    let h1 = h1 as u32;
-                    let h2 = h2 as u32;
-                    let hash = ((h1 as u64) << 32) + (h2 as u64);
-
-                    let retval = if retval == 0 {
-                        None
-                    } else {
-                        Some(unsafe {
-                            let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
-                            &*ptr
-                        })
-                    };
-
-                    let resize_func = caller
-                        .get_export("__cfx_extend_retval_buffer")
-                        .and_then(|export| export.into_func());
-
-                    let call_result = call_native(hash, buf.as_slice(), mem, retval, resize_func);
-
-                    match call_result {
-                        CallResult::NoReturn => -2,
-                        CallResult::NoSpace => -1,
-                        CallResult::OkWithLen(len) => len as _,
-                        CallResult::Ok => 0,
-                    }
-                },
-            )
-            .unwrap();
-
-        linker
-            .func(
-                "host",
-                "canonicalize_ref",
-                |caller: Caller, ref_idx: i32, ptr: i32, len: i32| {
-                    let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
-
-                    unsafe {
-                        let ptr = mem.data_ptr().add(ptr as _) as *mut _;
-
-                        if let Some(canonicalize_ref) = CANONICALIZE_REF {
-                            return canonicalize_ref(ref_idx as _, ptr, len as _);
-                        }
-                    }
-
-                    return 0;
-                },
-            )
-            .unwrap();
-
-        let module = Module::new(engine, bytes).unwrap();
-        let instance = linker.instantiate(&module).unwrap();
-
-        let start = instance.get_func("_start").expect("no _start entry");
+        let module = Module::new(engine, bytes)?;
+        let instance = linker.instantiate(&module)?;
         let on_event = instance.get_func("__cfx_on_event");
 
-        start.call(&[]).unwrap();
+        if let Some(start) = instance.get_func("_start") {
+            start.call(&[])?;
+        }
 
-        ScriptModule {
+        Ok(ScriptModule {
             store,
             instance,
             on_event,
-        }
+        })
     }
 
-    fn alloc_bytes(&self, bytes: &[u8]) -> (u32, usize) {
+    fn alloc_bytes(&self, bytes: &[u8]) -> Option<(u32, usize)> {
         let malloc = self
             .instance
             .get_typed_func::<(i32, u32), u32>("__cfx_alloc")
-            .unwrap();
+            .ok()?;
 
-        let data_ptr = malloc.call((bytes.len() as _, 1)).unwrap();
-        let mem = self.instance.get_memory("memory").unwrap();
+        let data_ptr = malloc.call((bytes.len() as _, 1)).ok()?;
+        let mem = self.instance.get_memory("memory")?;
 
-        mem.write(data_ptr as _, bytes).unwrap();
+        mem.write(data_ptr as _, bytes).ok()?;
 
-        return (data_ptr, bytes.len());
+        Some((data_ptr, bytes.len()))
     }
 
-    fn free_bytes(&self, (offset, length): (u32, usize)) {
+    fn free_bytes(&self, (offset, length): (u32, usize)) -> Option<()> {
         let free = self
             .instance
             .get_typed_func::<(u32, u32, u32), ()>("__cfx_free")
-            .unwrap();
+            .ok()?;
 
-        free.call((offset as _, length as _, 1)).unwrap();
+        free.call((offset as _, length as _, 1)).ok()?;
+
+        Some(())
     }
 }
 
@@ -293,11 +252,68 @@ pub fn set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
     }
 }
 
+#[derive(Debug)]
+enum NativeError {
+    NoMemory,
+    MemoryAccessError(wasmtime::MemoryAccessError),
+}
+
 enum CallResult {
     NoReturn,
     NoSpace,
     OkWithLen(u32),
     Ok,
+}
+
+fn call_native_wrapper(
+    caller: Caller,
+    h1: i32,
+    h2: i32,
+    ptr: i32,
+    len: i32,
+    retval: i32,
+) -> Result<i32, NativeError> {
+    let mut buf = vec![0u32; len as usize];
+    let mem = caller
+        .get_export("memory")
+        .and_then(|ext| ext.into_memory())
+        .ok_or(NativeError::NoMemory)?;
+
+    if len > 0 && ptr != 0 {
+        let tmp = unsafe {
+            let ptr = buf.as_mut_ptr() as *mut u8;
+            std::slice::from_raw_parts_mut(ptr, len as usize * std::mem::size_of::<i32>())
+        };
+
+        mem.read(ptr as _, tmp)
+            .map_err(|err| NativeError::MemoryAccessError(err))?;
+    }
+
+    let h1 = h1 as u32;
+    let h2 = h2 as u32;
+    let hash = ((h1 as u64) << 32) + (h2 as u64);
+
+    let retval = if retval == 0 {
+        None
+    } else {
+        Some(unsafe {
+            let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
+            &*ptr
+        })
+    };
+
+    let resize_func = caller
+        .get_export("__cfx_extend_retval_buffer")
+        .and_then(|export| export.into_func());
+
+    let call_result = call_native(hash, buf.as_slice(), mem, retval, resize_func);
+
+    Ok(match call_result {
+        CallResult::NoReturn => -2,
+        CallResult::NoSpace => -1,
+        CallResult::OkWithLen(len) => len as _,
+        CallResult::Ok => 0,
+    })
 }
 
 fn call_native(
@@ -445,14 +461,14 @@ fn call_call_ref(
         .get_typed_func::<(i32, i32, i32), i32>("__cfx_call_ref")
         .ok()?;
 
-    let args_guest = script.alloc_bytes(args);
+    let args_guest = script.alloc_bytes(args)?;
 
     let scrobj = {
         let result = cfx_call_ref
             .call((ref_idx as _, args_guest.0 as _, args.len() as _))
             .ok();
 
-        script.free_bytes(args_guest);
+        script.free_bytes(args_guest)?;
 
         result?
     };
@@ -486,4 +502,39 @@ fn call_call_ref(
     // }
 
     Some(ret_buf.len() as _)
+}
+
+fn log(caller: Caller, ptr: i32, len: i32) -> Option<()> {
+    let mut buf = vec![0u8; len as usize];
+    let mem = caller.get_export("memory")?.into_memory()?;
+    mem.read(ptr as _, buf.as_mut()).ok()?;
+
+    unsafe {
+        if let Some(logger) = LOGGER {
+            logger(buf.as_mut_ptr() as _);
+        }
+    }
+
+    Some(())
+}
+
+fn canonicalize_ref(caller: Caller, ref_idx: i32, ptr: i32, len: i32) -> Option<i32> {
+    let mem = caller.get_export("memory")?.into_memory()?;
+
+    unsafe {
+        let ptr = mem.data_ptr().add(ptr as _) as *mut _;
+
+        if let Some(canonicalize_ref) = CANONICALIZE_REF {
+            return Some(canonicalize_ref(ref_idx as _, ptr, len as _));
+        }
+    }
+
+    None
+}
+
+fn script_log<T: AsRef<str>>(msg: T) {
+    if let Some(log) = unsafe { LOGGER } {
+        let cstr = std::ffi::CString::new(msg.as_ref()).unwrap();
+        log(cstr.as_ptr());
+    }
 }

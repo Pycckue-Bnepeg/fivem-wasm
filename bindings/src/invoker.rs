@@ -2,6 +2,7 @@ use crate::{
     ref_funcs::RefFunction,
     types::{RetVal, ReturnValue},
 };
+
 use std::cell::RefCell;
 
 const RETVAL_BUFFER_SIZE: usize = 1 << 15;
@@ -51,7 +52,6 @@ pub enum InvokeError {
     NoSpace,
 }
 
-// TODO: Result<Ret, ()>
 pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Result<Ret, InvokeError>
 where
     Ret: RetVal,
@@ -120,6 +120,6 @@ where
 
 /// A FiveM runtime native. Registers current resource as an event handler.
 /// Means that if someone triggers an event with this name the resource will be notified.
-pub fn register_resource_as_event_handler(event: &str) {
-    let _ = invoke::<(), _>(0xD233A168, &[Val::String(event)]);
+pub fn register_resource_as_event_handler(event: &str) -> Result<(), InvokeError> {
+    invoke(0xD233A168, &[Val::String(event)])
 }

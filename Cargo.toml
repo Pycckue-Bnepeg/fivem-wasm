@@ -8,5 +8,5 @@ members = [
     "standalone",
 
     # examples
-    "examples/entry",
+    "examples/basic",
 ]
