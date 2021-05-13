@@ -8,7 +8,8 @@ use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
 pub type LogFunc = extern "C" fn(msg: *const i8);
 pub type InvokeFunc = extern "C" fn(args: *mut NativeContext) -> u32;
-pub type CanonicalizeRefFunc = extern "C" fn(ref_idx: u32, canon: *const *mut i8) -> u32;
+pub type CanonicalizeRefFunc =
+    extern "C" fn(ref_idx: u32, buffer: *mut i8, buffer_size: u32) -> i32;
 
 #[repr(C)]
 #[derive(Default)]
@@ -211,6 +212,26 @@ impl ScriptModule {
                         CallResult::OkWithLen(len) => len as _,
                         CallResult::Ok => 0,
                     }
+                },
+            )
+            .unwrap();
+
+        linker
+            .func(
+                "host",
+                "canonicalize_ref",
+                |caller: Caller, ref_idx: i32, ptr: i32, len: i32| {
+                    let mem = caller.get_export("memory").unwrap().into_memory().unwrap();
+
+                    unsafe {
+                        let ptr = mem.data_ptr().add(ptr as _) as *mut _;
+
+                        if let Some(canonicalize_ref) = CANONICALIZE_REF {
+                            return canonicalize_ref(ref_idx as _, ptr, len as _);
+                        }
+                    }
+
+                    return 0;
                 },
             )
             .unwrap();

@@ -31,15 +31,26 @@ struct Commands {
     name: String,
 }
 
-// TODO: Ref funcs
-// fn register_command() {
-//     // 0x5FA79B0F
-// }
-
 fn registered_commands() -> Vec<Commands> {
     // 0xD4BEF069
     let list: Packed<Vec<Commands>> = fivem::invoker::invoke(0xD4BEF069, &[]).unwrap();
     list.into_inner()
+}
+
+fn register_console_listener() {
+    #[derive(Deserialize)]
+    struct Test {
+        channel: String,
+        message: String,
+    }
+
+    let func = fivem::ref_funcs::RefFunction::new(|i: Test| -> () {
+        println!("WOW !");
+        ()
+    });
+
+    let _ =
+        fivem::invoker::invoke::<(), _>(0x281B5448, &[fivem::invoker::Val::RefFunc(func.clone())]);
 }
 
 #[no_mangle]
@@ -62,7 +73,8 @@ pub extern "C" fn _start() {
 
     let _ = fivem::runtime::spawn(task);
 
-    let commands = registered_commands();
+    // let commands = registered_commands();
+    register_console_listener();
 
-    log(format!("{:?}", commands));
+    // log(format!("{:?}", commands));
 }

@@ -2,7 +2,8 @@ use std::ffi::{c_void, CStr};
 
 pub type LogFunc = extern "C" fn(msg: *const i8);
 pub type InvokeFunc = extern "C" fn(args: *mut c_void) -> u32;
-pub type CanonicalizeRefFunc = extern "C" fn(ref_idx: u32, canon: *const *mut i8) -> u32;
+pub type CanonicalizeRefFunc =
+    extern "C" fn(ref_idx: u32, buffer: *mut i8, buffer_size: u32) -> i32;
 
 #[no_mangle]
 pub extern "C" fn wasm_create_runtime() -> *mut c_void {
@@ -98,7 +99,7 @@ pub unsafe extern "C" fn wasm_runtime_call_ref(
     let args = std::slice::from_raw_parts(args, args_len as _);
 
     RETVAL.with(|retval| {
-        let written = runtime.call_ref(ref_idx, args, &mut retval.borrow_mut());
+        let written = { runtime.call_ref(ref_idx, args, &mut retval.borrow_mut()) };
 
         *ret = retval.borrow().as_ptr();
         *ret_size = written;

@@ -1,4 +1,7 @@
-use crate::types::{RetVal, ReturnValue};
+use crate::{
+    ref_funcs::RefFunction,
+    types::{RetVal, ReturnValue},
+};
 use std::cell::RefCell;
 
 const RETVAL_BUFFER_SIZE: usize = 1 << 15;
@@ -34,12 +37,13 @@ pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
     })
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub enum Val<'a> {
     Integer(u64),
     Float(f32),
     String(&'a str),
     Bytes(&'a [u8]),
+    RefFunc(RefFunction),
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +85,14 @@ where
 
             Val::Bytes(bytes) => {
                 args.push(bytes.as_ptr() as _);
+            }
+
+            Val::RefFunc(func) => {
+                let cstr = std::ffi::CString::new(func.name()).unwrap();
+                let ptr = cstr.as_bytes_with_nul().as_ptr();
+
+                strings.push(cstr);
+                args.push(ptr as _);
             }
         }
     }

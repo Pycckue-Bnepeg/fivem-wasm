@@ -3,6 +3,7 @@ use serde::de::DeserializeOwned;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
+///
 pub enum ReturnType {
     Empty = 0,
     Number,
