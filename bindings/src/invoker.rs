@@ -1,6 +1,6 @@
 use crate::{
     ref_funcs::RefFunction,
-    types::{RetVal, ReturnValue},
+    types::{GuestArg, RetVal, ReturnValue, Vector3},
 };
 
 use std::cell::RefCell;
@@ -18,10 +18,12 @@ pub mod ffi {
         pub fn invoke(
             hash_hi: i32,
             hash_lo: i32,
-            ptr: *const u32,
+            ptr: *const crate::types::GuestArg,
             len: usize,
             retval: *const crate::types::ReturnValue,
         ) -> i32;
+
+        // pub fn invoke_ref_func() -> i32;
     }
 }
 
@@ -39,19 +41,39 @@ pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
 }
 
 // #[derive(Debug)]
+// TODO: Add refs
 pub enum Val<'a> {
-    Integer(u64),
+    RefInteger(&'a u32),
+    RefFloat(&'a f32),
+    RefLong(&'a u64),
+
+    MutRefInteger(&'a mut u32),
+    MutRefFloat(&'a mut f32),
+    MutRefLong(&'a mut u64),
+
+    Integer(u32),
     Float(f32),
+    Long(u64),
+
+    Vector3(Vector3),
+    RefVector3(&'a Vector3),
+    MutRefVector3(&'a mut Vector3),
+
     String(&'a str),
     Bytes(&'a [u8]),
+    MutBytes(&'a mut [u8]),
+
     RefFunc(RefFunction),
 }
 
 #[derive(Debug, Clone)]
 pub enum InvokeError {
+    NullResult,
     NoSpace,
+    Code(i32),
 }
 
+// TODO Iterator::map
 pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Result<Ret, InvokeError>
 where
     Ret: RetVal,
@@ -62,17 +84,57 @@ where
     let hash_hi = (hash >> 32) as i32;
     let hash_lo = (hash & 0xFFFFFFFF) as i32;
 
-    let mut args: Vec<u32> = Vec::new();
+    let mut args: Vec<GuestArg> = Vec::new();
     let mut strings = Vec::new(); // cleanup memory after a call
 
     for arg in iter {
         match arg {
             Val::Integer(int) => {
-                args.push(int as *const _ as _);
+                args.push(GuestArg::new(int, false));
             }
 
             Val::Float(float) => {
-                args.push(float as *const _ as _);
+                args.push(GuestArg::new(float, false));
+            }
+
+            Val::Long(long) => {
+                args.push(GuestArg::new(long, false));
+            }
+
+            Val::RefInteger(int) => {
+                args.push(GuestArg::new(int, true));
+            }
+
+            Val::RefFloat(float) => {
+                args.push(GuestArg::new(float, true));
+            }
+
+            Val::RefLong(long) => {
+                args.push(GuestArg::new(long, true));
+            }
+
+            Val::MutRefInteger(int) => {
+                args.push(GuestArg::new(int, true));
+            }
+
+            Val::MutRefFloat(float) => {
+                args.push(GuestArg::new(float, true));
+            }
+
+            Val::MutRefLong(long) => {
+                args.push(GuestArg::new(long, true));
+            }
+
+            Val::Vector3(vec) => {
+                args.push(GuestArg::new(vec, false));
+            }
+
+            Val::RefVector3(vec) => {
+                args.push(GuestArg::new(vec, true));
+            }
+
+            Val::MutRefVector3(vec) => {
+                args.push(GuestArg::new(vec, true));
             }
 
             Val::String(string) => {
@@ -80,11 +142,16 @@ where
                 let ptr = cstr.as_bytes_with_nul().as_ptr();
 
                 strings.push(cstr);
-                args.push(ptr as _);
+
+                args.push(GuestArg::new(unsafe { &*ptr }, true));
             }
 
             Val::Bytes(bytes) => {
-                args.push(bytes.as_ptr() as _);
+                args.push(GuestArg::new(bytes, true));
+            }
+
+            Val::MutBytes(bytes) => {
+                args.push(GuestArg::new(bytes, true));
             }
 
             Val::RefFunc(func) => {
@@ -92,7 +159,8 @@ where
                 let ptr = cstr.as_bytes_with_nul().as_ptr();
 
                 strings.push(cstr);
-                args.push(ptr as _);
+
+                args.push(GuestArg::new(unsafe { &*ptr }, true));
             }
         }
     }
@@ -108,8 +176,16 @@ where
             (&retval) as *const _,
         );
 
+        if ret_len == -4 {
+            return Err(InvokeError::NullResult);
+        }
+
         if ret_len == -1 {
             return Err(InvokeError::NoSpace);
+        }
+
+        if ret_len < 0 {
+            return Err(InvokeError::Code(ret_len));
         }
 
         let read_buf = std::slice::from_raw_parts(buf.borrow().as_ptr(), ret_len as usize);

@@ -27,6 +27,7 @@ impl From<u32> for ReturnType {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct ReturnValue {
     pub rettype: ReturnType,
     pub buffer: u32, // ptr
@@ -131,4 +132,26 @@ pub unsafe trait RetVal {
     const IDENT: ReturnType;
 
     unsafe fn convert(bytes: &[u8]) -> Self;
+}
+
+#[repr(C)]
+#[derive(Default)]
+pub struct GuestArg {
+    pub is_ref: bool,
+    pub value: u64,
+    pub size: u32,
+}
+
+impl GuestArg {
+    pub fn new<T: Sized>(argument: &T, is_ref: bool) -> GuestArg {
+        GuestArg {
+            is_ref,
+            value: argument as *const _ as u64,
+            size: if is_ref {
+                8
+            } else {
+                std::mem::size_of::<T>() as u32
+            },
+        }
+    }
 }

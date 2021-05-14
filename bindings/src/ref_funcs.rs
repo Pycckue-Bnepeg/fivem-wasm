@@ -198,3 +198,12 @@ impl RefFunction {
         &self.name
     }
 }
+
+// pub fn invoke_ref_func<In, Out>(func: &ExternRefFunction, args: &T) -> Option<Out>
+// where
+//     In: Serialize,
+//     Out: DeserializeOwned,
+// {
+//     let mut retval_len = 0;
+//     crate::invoker::invoke(0xE3551879)
+// }

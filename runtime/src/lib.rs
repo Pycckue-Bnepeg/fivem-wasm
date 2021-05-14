@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use fivem::types::{ReturnType, ReturnValue, ScrObject, Vector3};
+use fivem::types::{GuestArg, ReturnType, ReturnValue, ScrObject, Vector3};
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
@@ -255,10 +255,12 @@ pub fn set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
 #[derive(Debug)]
 enum NativeError {
     NoMemory,
-    MemoryAccessError(wasmtime::MemoryAccessError),
+    // MemoryAccessError(wasmtime::MemoryAccessError),
 }
 
 enum CallResult {
+    NullResult,
+    TooMuchArgs,
     NoReturn,
     NoSpace,
     OkWithLen(u32),
@@ -273,20 +275,18 @@ fn call_native_wrapper(
     len: i32,
     retval: i32,
 ) -> Result<i32, NativeError> {
-    let mut buf = vec![0u32; len as usize];
+    let mut args = None;
+
     let mem = caller
         .get_export("memory")
         .and_then(|ext| ext.into_memory())
         .ok_or(NativeError::NoMemory)?;
 
     if len > 0 && ptr != 0 {
-        let tmp = unsafe {
-            let ptr = buf.as_mut_ptr() as *mut u8;
-            std::slice::from_raw_parts_mut(ptr, len as usize * std::mem::size_of::<i32>())
-        };
-
-        mem.read(ptr as _, tmp)
-            .map_err(|err| NativeError::MemoryAccessError(err))?;
+        unsafe {
+            let ptr = mem.data_ptr().add(ptr as _) as *const GuestArg;
+            args = Some(std::slice::from_raw_parts(ptr, len as _));
+        }
     }
 
     let h1 = h1 as u32;
@@ -306,9 +306,11 @@ fn call_native_wrapper(
         .get_export("__cfx_extend_retval_buffer")
         .and_then(|export| export.into_func());
 
-    let call_result = call_native(hash, buf.as_slice(), mem, retval, resize_func);
+    let call_result = call_native(hash, args.unwrap_or_else(|| &[]), mem, retval, resize_func);
 
     Ok(match call_result {
+        CallResult::NullResult => -4,
+        CallResult::TooMuchArgs => -3,
         CallResult::NoReturn => -2,
         CallResult::NoSpace => -1,
         CallResult::OkWithLen(len) => len as _,
@@ -318,7 +320,7 @@ fn call_native_wrapper(
 
 fn call_native(
     hash: u64,
-    args: &[u32],
+    args: &[GuestArg],
     memory: Memory,
     retval: Option<&ReturnValue>,
     resize_func: Option<Func>,
@@ -329,11 +331,27 @@ fn call_native(
     ctx.num_arguments = args.len() as _;
 
     let mem_start = unsafe { memory.data_unchecked().as_ptr() };
+    let ctx_args = ctx.arguments.as_mut_ptr() as *mut u8;
 
-    for (idx, &offset) in args.iter().enumerate() {
+    let mut idx = 0;
+    for arg in args.iter() {
+        if (idx + arg.size as usize) > (ctx.arguments.len() * std::mem::size_of::<usize>()) {
+            return CallResult::TooMuchArgs;
+        }
+
         unsafe {
-            ctx.arguments[idx] = mem_start.offset(offset as isize) as usize;
-        };
+            if arg.is_ref {
+                (ctx_args.add(idx) as *mut usize).write(mem_start.add(arg.value as usize) as _);
+            } else {
+                std::ptr::copy(
+                    mem_start.add(arg.value as usize),
+                    ctx_args.add(idx),
+                    arg.size as _,
+                );
+            }
+        }
+
+        idx += arg.size as usize;
     }
 
     if let Some(invoke) = unsafe { INVOKE } {
@@ -383,6 +401,10 @@ fn call_native(
             }
 
             ReturnType::String => {
+                if ctx.arguments[0] == 0 {
+                    return CallResult::NullResult;
+                }
+
                 let cstr = unsafe { CStr::from_ptr(ctx.arguments[0] as *const _) };
                 let bytes = cstr.to_bytes();
                 let len = bytes.len();
@@ -399,7 +421,7 @@ fn call_native(
                     std::ptr::copy(bytes.as_ptr(), buffer, len);
                 }
 
-                CallResult::OkWithLen(len as _)
+                return CallResult::OkWithLen(len as _);
             }
 
             ReturnType::Vector3 => {
@@ -426,6 +448,10 @@ fn call_native(
                     unsafe { &*(ctx.arguments.as_ptr() as *const fivem::types::ScrObject) };
 
                 let len = scrobj.length;
+
+                if len == 0 || scrobj.data == 0 {
+                    return CallResult::NullResult;
+                }
 
                 if (retval.capacity as u64) < len {
                     if let Some(new_buffer) = resize_buffer(len as usize) {
