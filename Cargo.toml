@@ -11,5 +11,6 @@ members = [
     "standalone",
 
     # examples
-    "examples/basic",
+    "examples/basic-client",
+    "examples/basic-server"
 ]

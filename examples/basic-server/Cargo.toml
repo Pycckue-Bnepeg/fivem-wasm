@@ -1,5 +1,5 @@
 [package]
-name = "basic"
+name = "basic-server"
 version = "0.1.0"
 authors = ["ZOTTCE <zottce@gmail.com>"]
 edition = "2018"

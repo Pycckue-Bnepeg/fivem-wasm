@@ -1,5 +1,9 @@
-use fivem::server::events::PlayerConnecting;
+use fivem::{
+    ref_funcs::{ExternRefFunction, RefFunction},
+    server::events::PlayerConnecting,
+};
 use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 
 async fn handle_connections() {
     let mut events = fivem::server::events::player_connecting();
@@ -15,18 +19,28 @@ async fn handle_connections() {
 }
 
 async fn show_something(event: PlayerConnecting) {
-    event.deferrals.defer.invoke::<(), ()>(&());
+    event.deferrals.defer.invoke::<(), ()>(());
 
-    #[derive(serde::Serialize)]
-    struct Message {
+    #[derive(Serialize)]
+    struct UpdateMessage {
         message: String,
     }
 
-    let message = Message {
+    #[derive(Serialize)]
+    struct DoneMessage {
+        // failure_message: Option<String>,
+    }
+
+    let udp_msg = UpdateMessage {
         message: String::from("Hello from Rust!"),
     };
 
-    event.deferrals.update.invoke::<(), _>(&message);
+    let done_msg = DoneMessage {
+        // failure_message: None,
+    };
+
+    event.deferrals.update.invoke::<(), _>(&udp_msg);
+    event.deferrals.done.invoke::<(), _>(&done_msg);
 }
 
 mod kvp {
@@ -86,6 +100,45 @@ fn print_my_keys() {
     println!("DONE FINDING KEYS");
 }
 
+fn test_exports() {
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Export {
+        export_data: ExternRefFunction,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Something {
+        something: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SomeObject {
+        first: u64,
+        second: f32,
+        third: String,
+    }
+
+    let export = format!("__cfx_export_emitjs_testique");
+
+    let func = RefFunction::new(|input: Export| {
+        fivem::log(format!("what {:?}", input));
+
+        input.export_data.invoke::<(), _>(&SomeObject {
+            first: 5123,
+            second: 10.5,
+            third: String::from("hellow!"),
+        });
+
+        Something {
+            something: String::from("something ..."),
+        }
+    });
+
+    let export_data = func.as_extern_ref_func();
+
+    fivem::events::emit(&export, Export { export_data });
+}
+
 #[no_mangle]
 pub extern "C" fn _start() {
     // cleanup prev
@@ -110,27 +163,8 @@ pub extern "C" fn _start() {
     println!("{:?}", kvp::resource_kvp_float("my:float"));
 
     print_my_keys();
+    test_exports();
 
     let task = handle_connections();
     let _ = fivem::runtime::spawn(task);
 }
-
-/*
-
-    output:
-
-        BEFORE:
-        Some(0)
-        None
-        Some(0.0)
-        AFTER:
-        Some(55561)
-        Some("stringify")
-        Some(1345.5)
-        START FINDING KEYS:
-        found a new key: "my:float"
-        found a new key: "my:int"
-        found a new key: "my:str"
-        DONE FINDING KEYS
-
-*/

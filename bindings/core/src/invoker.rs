@@ -35,8 +35,6 @@ pub mod ffi {
 
 #[no_mangle]
 pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
-    crate::log(format!("request to resize with new size: {}", new_size));
-
     RETVAL_BUFFER.with(|retval| {
         let mut vec = retval.borrow_mut();
         vec.resize(new_size, 0);
@@ -150,11 +148,11 @@ where
             }
 
             Val::Bytes(bytes) => {
-                args.push(GuestArg::new(bytes, true));
+                args.push(GuestArg::new(unsafe { &*bytes.as_ptr() }, true));
             }
 
             Val::MutBytes(bytes) => {
-                args.push(GuestArg::new(bytes, true));
+                args.push(GuestArg::new(unsafe { &*bytes.as_ptr() }, true));
             }
 
             Val::RefFunc(func) => {
@@ -198,13 +196,13 @@ where
 }
 
 // TODO: Result ...
-pub fn invoke_ref_func<Out, In>(func: &ExternRefFunction, args: &In) -> Option<Out>
+pub fn invoke_ref_func<Out, In>(func: &ExternRefFunction, args: In) -> Option<Out>
 where
     In: Serialize,
     Out: DeserializeOwned,
 {
     let ref_name = std::ffi::CString::new(func.name()).ok()?;
-    let args = rmp_serde::to_vec(args).ok()?;
+    let args = rmp_serde::to_vec(&args).ok()?;
 
     let (buffer, buffer_capacity) = RETVAL_BUFFER.with(|buf| {
         let mut buffer = buf.borrow_mut();

@@ -13,6 +13,7 @@ thread_local! {
     static BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; 1 << 15]);
     static RETVAL: RefCell<ScrObject> = RefCell::new(ScrObject { data: 0, length: 0 });
     static HANDLERS: RefCell<HashMap<u32, Rc<RefCell<InnerRefFunction>>>> = RefCell::new(HashMap::new());
+    static REF_IDX: RefCell<u32> = RefCell::new(0);
 }
 
 #[no_mangle]
@@ -130,20 +131,21 @@ impl InnerRefFunction {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "_ExtStruct")]
-pub struct ExternRefFunction((u8, String));
+pub struct ExternRefFunction((i8, serde_bytes::ByteBuf));
 
 impl ExternRefFunction {
-    pub fn new(name: &str) -> ExternRefFunction {
-        ExternRefFunction((10, name.to_owned()))
+    pub(crate) fn new(name: &str) -> ExternRefFunction {
+        let bytes = serde_bytes::ByteBuf::from(name.bytes().collect::<Vec<u8>>());
+        ExternRefFunction((10, bytes))
     }
 
     pub(crate) fn name(&self) -> &str {
-        &self.0 .1
+        unsafe { std::str::from_utf8_unchecked(&self.0 .1) }
     }
 
-    pub fn invoke<Out, In>(&self, args: &In) -> Option<Out>
+    pub fn invoke<Out, In>(&self, args: In) -> Option<Out>
     where
         In: Serialize,
         Out: DeserializeOwned,
@@ -165,10 +167,6 @@ impl RefFunction {
         Input: DeserializeOwned,
         Output: Serialize,
     {
-        thread_local! {
-            static REF_IDX: RefCell<u32> = RefCell::new(0);
-        }
-
         let idx = REF_IDX.with(|idx| {
             let mut idx = idx.borrow_mut();
             *idx += 1;
@@ -202,7 +200,47 @@ impl RefFunction {
         }
     }
 
+    pub fn new_raw<Handler>(mut handler: Handler) -> RefFunction
+    where
+        Handler: FnMut(&[u8]) -> Vec<u8> + 'static,
+    {
+        let idx = REF_IDX.with(|idx| {
+            let mut idx = idx.borrow_mut();
+            *idx += 1;
+            *idx
+        });
+
+        let name = canonicalize_ref(idx);
+
+        let func = move |input: &[u8], out_buf: &mut Vec<u8>| {
+            let out = handler(input);
+            out_buf.extend(out.iter());
+        };
+
+        let inner = InnerRefFunction {
+            idx,
+            func: Box::new(func),
+            refs: 0,
+        };
+
+        let inner = Rc::new(RefCell::new(inner));
+
+        HANDLERS.with(|handlers| {
+            let mut handlers = handlers.borrow_mut();
+            handlers.insert(idx, inner.clone());
+        });
+
+        RefFunction {
+            name,
+            inner: inner.clone(),
+        }
+    }
+
     pub(crate) fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn as_extern_ref_func(&self) -> ExternRefFunction {
+        ExternRefFunction::new(self.name())
     }
 }

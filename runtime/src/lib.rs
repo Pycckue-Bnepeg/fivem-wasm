@@ -55,6 +55,14 @@ impl Runtime {
 
         self.script = Some(script);
 
+        if let Some(start) = self
+            .script
+            .as_ref()
+            .and_then(|script| script.instance.get_func(CFX_START))
+        {
+            start.call(&[])?;
+        }
+
         Ok(())
     }
 
@@ -232,10 +240,6 @@ impl ScriptModule {
         let module = Module::new(engine, bytes)?;
         let instance = linker.instantiate(&module)?;
         let on_event = instance.get_func(CFX_ON_EVENT);
-
-        if let Some(start) = instance.get_func(CFX_START) {
-            start.call(&[])?;
-        }
 
         Ok(ScriptModule {
             store,

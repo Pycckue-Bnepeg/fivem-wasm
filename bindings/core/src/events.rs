@@ -143,30 +143,3 @@ pub fn emit<T: Serialize>(event_name: &str, payload: T) {
         let _ = crate::invoker::invoke::<(), _>(0x91310870, args); // TRIGGER_EVENT_INTERNAL
     }
 }
-
-#[cfg(feature = "server")]
-pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
-    if let Ok(payload) = rmp_serde::to_vec(&payload) {
-        let args = &[
-            Val::String(event_name),
-            Val::String(source),
-            Val::Bytes(&payload),
-            Val::Integer(payload.len() as _),
-        ];
-
-        let _ = crate::invoker::invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
-    }
-}
-
-#[cfg(feature = "client")]
-pub fn emit_net<T: Serialize>(event_name: &str, payload: T) {
-    if let Ok(payload) = rmp_serde::to_vec(&payload) {
-        let args = &[
-            Val::String(event_name),
-            Val::Bytes(&payload),
-            Val::Integer(payload.len() as _),
-        ];
-
-        let _ = crate::invoker::invoke::<(), _>(0x7FDD1128, args); // TRIGGER_SERVER_EVENT_INTERNAL
-    }
-}
