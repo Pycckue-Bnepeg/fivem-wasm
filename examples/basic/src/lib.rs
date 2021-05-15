@@ -1,3 +1,4 @@
+use fivem::server::events::PlayerConnecting;
 use futures::StreamExt;
 
 async fn handle_connections() {
@@ -8,7 +9,24 @@ async fn handle_connections() {
             "A new player connected: {}",
             event.payload().player_name
         ));
+
+        let _ = fivem::runtime::spawn(show_something(event.into_inner()));
     }
+}
+
+async fn show_something(event: PlayerConnecting) {
+    event.deferrals.defer.invoke::<(), ()>(&());
+
+    #[derive(serde::Serialize)]
+    struct Message {
+        message: String,
+    }
+
+    let message = Message {
+        message: String::from("Hello from Rust!"),
+    };
+
+    event.deferrals.update.invoke::<(), _>(&message);
 }
 
 mod kvp {

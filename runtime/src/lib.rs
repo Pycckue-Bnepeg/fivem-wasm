@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use fivem::types::{GuestArg, ReturnType, ReturnValue, ScrObject, Vector3};
+use fivem::types::{call_result::*, GuestArg, ReturnType, ReturnValue, ScrObject, Vector3};
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
@@ -179,7 +179,7 @@ impl ScriptModule {
                     Err(err) => {
                         script_log(format!("host::invoke error: {:?}", err));
 
-                        -1
+                        CRITICAL_ERROR
                     }
                 }
             },
@@ -190,6 +190,27 @@ impl ScriptModule {
             "canonicalize_ref",
             |caller: Caller, ref_idx: i32, ptr: i32, len: i32| {
                 canonicalize_ref(caller, ref_idx, ptr, len).unwrap_or(0)
+            },
+        )?;
+
+        linker.func(
+            "host",
+            "invoke_ref_func",
+            |caller: Caller,
+             ref_name: i32,
+             args: i32,
+             len: i32,
+             buffer: i32,
+             buffer_cap: i32|
+             -> i32 {
+                match invoke_ref_func_wrapper(caller, ref_name, args, len, buffer, buffer_cap) {
+                    Ok(result) => result.into(),
+                    Err(err) => {
+                        script_log(format!("host::invoke_ref_func error: {:?}", err));
+
+                        CRITICAL_ERROR
+                    }
+                }
             },
         )?;
 
@@ -255,16 +276,33 @@ pub fn set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
 #[derive(Debug)]
 enum NativeError {
     NoMemory,
+    InvokeError,
     // MemoryAccessError(wasmtime::MemoryAccessError),
 }
 
+#[derive(Debug, Clone, Copy)]
 enum CallResult {
+    WrongArgs,
     NullResult,
     TooMuchArgs,
     NoReturn,
     NoSpace,
     OkWithLen(u32),
     Ok,
+}
+
+impl Into<i32> for CallResult {
+    fn into(self) -> i32 {
+        match self {
+            CallResult::WrongArgs => WRONG_ARGS,
+            CallResult::NullResult => NULL_RESULT,
+            CallResult::TooMuchArgs => TOO_MUCH_ARGS,
+            CallResult::NoReturn => NO_RETURN_VALUE,
+            CallResult::NoSpace => NO_SPACE_IN_BUFFER,
+            CallResult::OkWithLen(len) => len as _,
+            CallResult::Ok => SUCCESS,
+        }
+    }
 }
 
 fn call_native_wrapper(
@@ -308,14 +346,7 @@ fn call_native_wrapper(
 
     let call_result = call_native(hash, args.unwrap_or_else(|| &[]), mem, retval, resize_func);
 
-    Ok(match call_result {
-        CallResult::NullResult => -4,
-        CallResult::TooMuchArgs => -3,
-        CallResult::NoReturn => -2,
-        CallResult::NoSpace => -1,
-        CallResult::OkWithLen(len) => len as _,
-        CallResult::Ok => 0,
-    })
+    Ok(call_result.into())
 }
 
 fn call_native(
@@ -385,8 +416,8 @@ fn call_native(
         match rettype {
             ReturnType::Empty => CallResult::Ok,
             ReturnType::Number => {
-                if retval.capacity < 4 {
-                    if let Some(new_buffer) = resize_buffer(4) {
+                if retval.capacity < 8 {
+                    if let Some(new_buffer) = resize_buffer(8) {
                         buffer = new_buffer
                     } else {
                         return CallResult::NoSpace;
@@ -394,10 +425,10 @@ fn call_native(
                 }
 
                 unsafe {
-                    *(buffer as *mut u32) = ctx.arguments[0] as u32;
+                    *(buffer as *mut usize) = ctx.arguments[0];
                 }
 
-                return CallResult::OkWithLen(4);
+                return CallResult::OkWithLen(8);
             }
 
             ReturnType::String => {
@@ -530,6 +561,84 @@ fn call_call_ref(
     Some(ret_buf.len() as _)
 }
 
+fn invoke_ref_func_wrapper(
+    caller: Caller,
+    ref_name: i32,
+    args: i32,
+    args_len: i32,
+    buffer: i32,
+    buffer_cap: i32,
+) -> Result<CallResult, NativeError> {
+    let mem = caller
+        .get_export("memory")
+        .and_then(|ext| ext.into_memory())
+        .ok_or(NativeError::NoMemory)?;
+
+    let resize_func = caller
+        .get_export("__cfx_extend_retval_buffer")
+        .and_then(|export| export.into_func());
+
+    if ref_name == 0 || args == 0 {
+        return Ok(CallResult::WrongArgs);
+    }
+
+    let mut ctx = NativeContext::default();
+
+    ctx.native_identifier = 0xE3551879; // INVOKE_FUNCTION_REFERENCE
+    ctx.num_arguments = 4;
+
+    let mut retval_length = 0usize;
+
+    unsafe {
+        ctx.arguments[0] = mem.data_ptr().add(ref_name as _) as _; // char* referenceIdentity
+        ctx.arguments[1] = mem.data_ptr().add(args as _) as _; // char* argsSerialized
+        ctx.arguments[2] = args_len as _; // int argsLength
+        ctx.arguments[3] = &mut retval_length as *mut _ as _; // int* retvalLength
+
+        if let Some(invoke) = INVOKE {
+            if !fx_succeeded(invoke(&mut ctx)) {
+                return Err(NativeError::InvokeError);
+            }
+        }
+    }
+
+    if ctx.num_results == 0 || ctx.arguments[0] == 0 {
+        return Ok(CallResult::NullResult);
+    }
+
+    let resize_buffer = |new_size: usize| -> Option<*mut u8> {
+        if let Some(resizer) = resize_func.as_ref() {
+            let ptr = resizer.call(&[Val::I32(new_size as _)]).ok()?;
+
+            ptr.get(0).and_then(|val| val.i32()).and_then(|ptr| {
+                if ptr == 0 {
+                    None
+                } else {
+                    Some(unsafe { mem.data_ptr().add(ptr as _) })
+                }
+            })
+        } else {
+            None
+        }
+    };
+
+    let buffer = if buffer == 0 || (buffer_cap as usize) < retval_length {
+        resize_buffer(retval_length)
+    } else {
+        unsafe { Some(mem.data_ptr().add(buffer as _)) }
+    };
+
+    if let Some(buffer) = buffer {
+        unsafe {
+            std::ptr::copy(ctx.arguments[0] as *const u8, buffer, retval_length);
+        }
+
+        return Ok(CallResult::OkWithLen(retval_length as _));
+    }
+
+    Ok(CallResult::NoSpace)
+}
+
 fn log(caller: Caller, ptr: i32, len: i32) -> Option<()> {
     let mut buf = vec![0u8; len as usize];
     let mem = caller.get_export("memory")?.into_memory()?;
@@ -563,4 +672,8 @@ fn script_log<T: AsRef<str>>(msg: T) {
         let cstr = std::ffi::CString::new(msg.as_ref()).unwrap();
         log(cstr.as_ptr());
     }
+}
+
+fn fx_succeeded(result: u32) -> bool {
+    (result & 0x80000000) == 0
 }

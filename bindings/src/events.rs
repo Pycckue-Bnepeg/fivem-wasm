@@ -104,7 +104,7 @@ pub fn emit<T: Serialize>(event_name: &str, payload: T) {
             Val::Integer(payload.len() as _),
         ];
 
-        crate::invoker::invoke::<(), _>(0x91310870, args); // TRIGGER_EVENT_INTERNAL
+        let _ = crate::invoker::invoke::<(), _>(0x91310870, args); // TRIGGER_EVENT_INTERNAL
     }
 }
 
@@ -117,6 +117,6 @@ pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
             Val::Integer(payload.len() as _),
         ];
 
-        crate::invoker::invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
+        let _ = crate::invoker::invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
     }
 }

@@ -102,6 +102,39 @@ unsafe impl RetVal for u32 {
     }
 }
 
+// TODO: macro
+unsafe impl RetVal for i32 {
+    const IDENT: ReturnType = ReturnType::Number;
+
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const i32).read()
+    }
+}
+
+unsafe impl RetVal for u64 {
+    const IDENT: ReturnType = ReturnType::Number;
+
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const u64).read()
+    }
+}
+
+unsafe impl RetVal for i64 {
+    const IDENT: ReturnType = ReturnType::Number;
+
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const i64).read()
+    }
+}
+
+unsafe impl RetVal for f64 {
+    const IDENT: ReturnType = ReturnType::Number;
+
+    unsafe fn convert(bytes: &[u8]) -> Self {
+        (bytes.as_ptr() as *const f64).read()
+    }
+}
+
 unsafe impl RetVal for String {
     const IDENT: ReturnType = ReturnType::String;
 
@@ -154,4 +187,14 @@ impl GuestArg {
             },
         }
     }
+}
+
+pub mod call_result {
+    pub const SUCCESS: i32 = 0;
+    pub const NO_SPACE_IN_BUFFER: i32 = -1;
+    pub const NO_RETURN_VALUE: i32 = -2;
+    pub const TOO_MUCH_ARGS: i32 = -3;
+    pub const NULL_RESULT: i32 = -4;
+    pub const WRONG_ARGS: i32 = -5;
+    pub const CRITICAL_ERROR: i32 = -6;
 }

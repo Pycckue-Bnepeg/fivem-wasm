@@ -142,6 +142,18 @@ impl ExternRefFunction {
     pub fn new(name: &str) -> ExternRefFunction {
         ExternRefFunction((10, name.to_owned()))
     }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.0 .1
+    }
+
+    pub fn invoke<Out, In>(&self, args: &In) -> Option<Out>
+    where
+        In: Serialize,
+        Out: DeserializeOwned,
+    {
+        crate::invoker::invoke_ref_func(&self, args)
+    }
 }
 
 #[derive(Clone)]
@@ -194,16 +206,7 @@ impl RefFunction {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 }
-
-// pub fn invoke_ref_func<In, Out>(func: &ExternRefFunction, args: &T) -> Option<Out>
-// where
-//     In: Serialize,
-//     Out: DeserializeOwned,
-// {
-//     let mut retval_len = 0;
-//     crate::invoker::invoke(0xE3551879)
-// }

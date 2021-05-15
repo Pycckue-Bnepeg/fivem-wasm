@@ -1,8 +1,9 @@
 use crate::{
-    ref_funcs::RefFunction,
-    types::{GuestArg, RetVal, ReturnValue, Vector3},
+    ref_funcs::{ExternRefFunction, RefFunction},
+    types::{call_result, GuestArg, RetVal, ReturnValue, Vector3},
 };
 
+use serde::{de::DeserializeOwned, Serialize};
 use std::cell::RefCell;
 
 const RETVAL_BUFFER_SIZE: usize = 1 << 15;
@@ -23,7 +24,13 @@ pub mod ffi {
             retval: *const crate::types::ReturnValue,
         ) -> i32;
 
-        // pub fn invoke_ref_func() -> i32;
+        pub fn invoke_ref_func(
+            ref_name: *const i8,
+            args: *const u8,
+            args_len: usize,
+            buffer: *mut u8,
+            buffer_capacity: usize,
+        ) -> i32;
     }
 }
 
@@ -40,8 +47,6 @@ pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
     })
 }
 
-// #[derive(Debug)]
-// TODO: Add refs
 pub enum Val<'a> {
     RefInteger(&'a u32),
     RefFloat(&'a f32),
@@ -176,21 +181,57 @@ where
             (&retval) as *const _,
         );
 
-        if ret_len == -4 {
+        if ret_len == call_result::NULL_RESULT {
             return Err(InvokeError::NullResult);
         }
 
-        if ret_len == -1 {
+        if ret_len == call_result::NO_SPACE_IN_BUFFER {
             return Err(InvokeError::NoSpace);
         }
 
-        if ret_len < 0 {
+        if ret_len < call_result::SUCCESS {
             return Err(InvokeError::Code(ret_len));
         }
 
         let read_buf = std::slice::from_raw_parts(buf.borrow().as_ptr(), ret_len as usize);
 
         Ok(Ret::convert(read_buf))
+    })
+}
+
+// TODO: Result ...
+pub fn invoke_ref_func<Out, In>(func: &ExternRefFunction, args: &In) -> Option<Out>
+where
+    In: Serialize,
+    Out: DeserializeOwned,
+{
+    let ref_name = std::ffi::CString::new(func.name()).ok()?;
+    let args = rmp_serde::to_vec(args).ok()?;
+
+    let (buffer, buffer_capacity) = RETVAL_BUFFER.with(|buf| {
+        let mut buffer = buf.borrow_mut();
+        (buffer.as_mut_ptr(), buffer.capacity())
+    });
+
+    let result = unsafe {
+        ffi::invoke_ref_func(
+            ref_name.as_ptr(),
+            args.as_ptr(),
+            args.len(),
+            buffer,
+            buffer_capacity,
+        )
+    };
+
+    if result < call_result::SUCCESS {
+        return None;
+    }
+
+    RETVAL_BUFFER.with(|buf| {
+        let read_buf =
+            unsafe { std::slice::from_raw_parts(buf.borrow().as_ptr(), result as usize) };
+
+        rmp_serde::decode::from_read(read_buf).ok()
     })
 }
 
