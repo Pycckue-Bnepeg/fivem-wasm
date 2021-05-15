@@ -17,19 +17,14 @@ macro_rules! cfx_export {
             export_data: fivem::ref_funcs::ExternRefFunction,
         }
 
-        #[derive(serde::Serialize)]
-        struct Empty {
-            f: u32,
-        }
-
         let link = std::rc::Rc::new(std::cell::RefCell::new(None));
         let link_clone = link.clone();
         let export0 = format!("__cfx_export_{}_{}", $res, $exp);
 
-        let func = fivem::ref_funcs::RefFunction::new(move |input: Export| -> Empty {
+        let func = fivem::ref_funcs::RefFunction::new(move |input: Export| -> Vec<u8> {
             *link_clone.borrow_mut() = Some(input.export_data.clone());
 
-            Empty { f: 0 }
+            vec![]
         });
 
         let export_data = func.as_extern_ref_func();
@@ -37,19 +32,6 @@ macro_rules! cfx_export {
 
         link
     }};
-}
-
-#[derive(Serialize, Deserialize)]
-struct EmptyRes {}
-
-#[derive(Serialize)]
-struct Boolean {
-    qool: bool,
-}
-
-#[derive(Serialize)]
-struct Func {
-    func: ExternRefFunction,
 }
 
 #[derive(Serialize)]
@@ -61,7 +43,6 @@ struct Pos {
 
 #[derive(Serialize)]
 struct SpawnPlayer {
-    // pos: Pos,
     pos: HashMap<String, f32>,
     on_spawn: ExternRefFunction,
 }
@@ -80,8 +61,8 @@ pub extern "C" fn _start() {
     let force_respawn = cfx_export!("spawnmanager", "forceRespawn");
 
     let task = async move {
-        let on_spawn = RefFunction::new(|_: EmptyRes| EmptyRes {});
-        let callback = RefFunction::new(move |_: EmptyRes| {
+        let on_spawn = RefFunction::new(|_: Vec<()>| -> Vec<u8> { vec![] });
+        let callback = RefFunction::new(move |_: Vec<()>| -> Vec<u8> {
             let mut pos = HashMap::new();
             pos.insert("x".to_owned(), POS.x);
             pos.insert("y".to_owned(), POS.y);
@@ -96,28 +77,26 @@ pub extern "C" fn _start() {
                     on_spawn: on_spawn.as_extern_ref_func(),
                 });
 
-            EmptyRes {}
+            vec![]
         });
 
         set_callback
             .borrow()
             .as_ref()
             .unwrap()
-            .invoke::<(), _>(Func {
-                func: callback.as_extern_ref_func(),
-            });
+            .invoke::<(), _>(vec![callback.as_extern_ref_func()]);
 
         set_autospawn
             .borrow()
             .as_ref()
             .unwrap()
-            .invoke::<(), _>(Boolean { qool: true });
+            .invoke::<(), _>(vec![true]);
 
         force_respawn
             .borrow()
             .as_ref()
             .unwrap()
-            .invoke::<(), _>(EmptyRes {});
+            .invoke::<(), Vec<u8>>(vec![]);
     };
 
     fivem::log("started ...");
