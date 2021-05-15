@@ -12,7 +12,6 @@ thread_local! {
     static RETVAL_BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; RETVAL_BUFFER_SIZE]);
 }
 
-#[doc(hidden)]
 pub mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
@@ -34,7 +33,6 @@ pub mod ffi {
     }
 }
 
-#[doc(hidden)]
 #[no_mangle]
 pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
     crate::log(format!("request to resize with new size: {}", new_size));
@@ -185,7 +183,7 @@ where
             return Err(InvokeError::NullResult);
         }
 
-        if ret_len == call_result::NO_SPACE_IN_BUFFER {
+        if ret_len == call_result::SMALL_RETURN_BUFFER {
             return Err(InvokeError::NoSpace);
         }
 

@@ -240,7 +240,7 @@ name = "cfx-wasm-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "fivem",
+ "fivem-core",
  "wasmtime",
  "wasmtime-wasi",
 ]
@@ -526,6 +526,35 @@ dependencies = [
 name = "fivem"
 version = "0.1.0"
 dependencies = [
+ "fivem-client",
+ "fivem-core",
+ "fivem-server",
+]
+
+[[package]]
+name = "fivem-client"
+version = "0.1.0"
+dependencies = [
+ "fivem-core",
+ "futures",
+ "rmp-serde",
+ "serde",
+]
+
+[[package]]
+name = "fivem-core"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "rmp-serde",
+ "serde",
+]
+
+[[package]]
+name = "fivem-server"
+version = "0.1.0"
+dependencies = [
+ "fivem-core",
  "futures",
  "rmp-serde",
  "serde",

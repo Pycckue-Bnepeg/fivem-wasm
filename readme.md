@@ -10,7 +10,7 @@ Also there is a question. Should it be BA's `wasmtime` or Parity's `wasmi`? Curr
 **I didn't test this on the client side.**
 
 ## Modules
-* [`examples/entry`](examples/entry/) - an example shows how to use bindings to access FiveM.
+* [`examples/basic`](examples/basic/) - an example shows how to use bindings to access FiveM.
 * [`bindings`](bindings/) - Rust bindings to WASM runtime to create mods.
 * [`glue`](glue/) - a crate that builds as a static library used by the FiveM component.
 * [`runtime`](runtime/) - implementation of wasmtime

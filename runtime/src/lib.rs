@@ -1,28 +1,35 @@
 use std::ffi::CStr;
 
-use fivem::types::{call_result::*, GuestArg, ReturnType, ReturnValue, ScrObject, Vector3};
+use fivem_core::types::{call_result::CRITICAL_ERROR, ScrObject};
+
 use wasmtime::*;
 use wasmtime_wasi::{sync::WasiCtxBuilder, Wasi};
 
-// mod walloc;
+mod invoker;
 
 pub type LogFunc = extern "C" fn(msg: *const i8);
-pub type InvokeFunc = extern "C" fn(args: *mut NativeContext) -> u32;
 pub type CanonicalizeRefFunc =
     extern "C" fn(ref_idx: u32, buffer: *mut i8, buffer_size: u32) -> i32;
 
-#[repr(C)]
-#[derive(Default)]
-pub struct NativeContext {
-    arguments: [usize; 32],
-    num_arguments: u32,
-    num_results: u32,
-    native_identifier: u64,
-}
-
 static mut LOGGER: Option<LogFunc> = None;
-static mut INVOKE: Option<InvokeFunc> = None;
 static mut CANONICALIZE_REF: Option<CanonicalizeRefFunc> = None;
+
+// expected exports from guests
+const CFX_START: &str = "_start";
+const CFX_ON_EVENT: &str = "__cfx_on_event";
+const CFX_ON_TICK: &str = "__cfx_on_tick";
+const CFX_CALL_REF: &str = "__cfx_call_ref";
+const CFX_ALLOC: &str = "__cfx_alloc";
+const CFX_FREE: &str = "__cfx_free";
+const CFX_DUPLICATE_REF: &str = "__cfx_duplicate_ref";
+const CFX_REMOVE_REF: &str = "__cfx_remove_ref";
+
+// exports from the host
+const HOST: &str = "host";
+const HOST_LOG: &str = "log";
+const HOST_INVOKE: &str = "invoke";
+const HOST_CANONICALIZE_REF: &str = "canonicalize_ref";
+const HOST_INVOKE_REF_FUNC: &str = "invoke_ref_func";
 
 pub struct Runtime {
     engine: Engine,
@@ -77,14 +84,17 @@ impl Runtime {
             };
 
             if wrapper().is_none() {
-                script_log(format!("__cfx_on_event error: it is not safe to continue"));
+                script_log(format!(
+                    "{} error: it is not safe to continue",
+                    CFX_ON_EVENT
+                ));
             }
         }
     }
 
     pub fn tick(&mut self) {
         self.script.as_ref().and_then(|script| {
-            let func = script.instance.get_func("__cfx_on_tick")?;
+            let func = script.instance.get_func(CFX_ON_TICK)?;
             func.call(&[]).ok()
         });
     }
@@ -102,7 +112,7 @@ impl Runtime {
             .and_then(|script| {
                 let func = script
                     .instance
-                    .get_typed_func::<i32, i32>("__cfx_duplicate_ref")
+                    .get_typed_func::<i32, i32>(CFX_DUPLICATE_REF)
                     .ok()?;
 
                 func.call(ref_idx as _).map(|idx| idx as _).ok()
@@ -114,7 +124,7 @@ impl Runtime {
         self.script.as_ref().and_then(|script| {
             let func = script
                 .instance
-                .get_typed_func::<i32, ()>("__cfx_remove_ref")
+                .get_typed_func::<i32, ()>(CFX_REMOVE_REF)
                 .ok()?;
 
             func.call(ref_idx as _).ok()
@@ -142,7 +152,7 @@ impl ScriptModule {
         let module = Module::new(engine, bytes)?;
 
         let instance = Instance::new(&store, &module, &[])?;
-        let on_event = instance.get_func("__cfx_on_event");
+        let on_event = instance.get_func(CFX_ON_EVENT);
 
         Ok(ScriptModule {
             store,
@@ -166,18 +176,18 @@ impl ScriptModule {
 
         wasi.add_to_linker(&mut linker)?;
 
-        linker.func("host", "log", |caller: Caller, ptr: i32, len: i32| {
+        linker.func(HOST, HOST_LOG, |caller: Caller, ptr: i32, len: i32| {
             log(caller, ptr, len);
         })?;
 
         linker.func(
-            "host",
-            "invoke",
+            HOST,
+            HOST_INVOKE,
             |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, retval: i32| -> i32 {
-                match call_native_wrapper(caller, h1, h2, ptr, len, retval) {
-                    Ok(result) => result,
+                match crate::invoker::call_native_wrapper(caller, h1, h2, ptr, len, retval) {
+                    Ok(result) => result.into(),
                     Err(err) => {
-                        script_log(format!("host::invoke error: {:?}", err));
+                        script_log(format!("{}::{} error: {:?}", HOST, HOST_INVOKE, err));
 
                         CRITICAL_ERROR
                     }
@@ -186,16 +196,16 @@ impl ScriptModule {
         )?;
 
         linker.func(
-            "host",
-            "canonicalize_ref",
+            HOST,
+            HOST_CANONICALIZE_REF,
             |caller: Caller, ref_idx: i32, ptr: i32, len: i32| {
                 canonicalize_ref(caller, ref_idx, ptr, len).unwrap_or(0)
             },
         )?;
 
         linker.func(
-            "host",
-            "invoke_ref_func",
+            HOST,
+            HOST_INVOKE_REF_FUNC,
             |caller: Caller,
              ref_name: i32,
              args: i32,
@@ -203,10 +213,15 @@ impl ScriptModule {
              buffer: i32,
              buffer_cap: i32|
              -> i32 {
-                match invoke_ref_func_wrapper(caller, ref_name, args, len, buffer, buffer_cap) {
+                match crate::invoker::invoke_ref_func_wrapper(
+                    caller, ref_name, args, len, buffer, buffer_cap,
+                ) {
                     Ok(result) => result.into(),
                     Err(err) => {
-                        script_log(format!("host::invoke_ref_func error: {:?}", err));
+                        script_log(format!(
+                            "{}::{} error: {:?}",
+                            HOST, HOST_INVOKE_REF_FUNC, err
+                        ));
 
                         CRITICAL_ERROR
                     }
@@ -216,9 +231,9 @@ impl ScriptModule {
 
         let module = Module::new(engine, bytes)?;
         let instance = linker.instantiate(&module)?;
-        let on_event = instance.get_func("__cfx_on_event");
+        let on_event = instance.get_func(CFX_ON_EVENT);
 
-        if let Some(start) = instance.get_func("_start") {
+        if let Some(start) = instance.get_func(CFX_START) {
             start.call(&[])?;
         }
 
@@ -232,7 +247,7 @@ impl ScriptModule {
     fn alloc_bytes(&self, bytes: &[u8]) -> Option<(u32, usize)> {
         let malloc = self
             .instance
-            .get_typed_func::<(i32, u32), u32>("__cfx_alloc")
+            .get_typed_func::<(i32, u32), u32>(CFX_ALLOC)
             .ok()?;
 
         let data_ptr = malloc.call((bytes.len() as _, 1)).ok()?;
@@ -246,7 +261,7 @@ impl ScriptModule {
     fn free_bytes(&self, (offset, length): (u32, usize)) -> Option<()> {
         let free = self
             .instance
-            .get_typed_func::<(u32, u32, u32), ()>("__cfx_free")
+            .get_typed_func::<(u32, u32, u32), ()>(CFX_FREE)
             .ok()?;
 
         free.call((offset as _, length as _, 1)).ok()?;
@@ -263,7 +278,7 @@ pub fn set_logger(log: LogFunc) {
 
 pub fn set_native_invoke(invoke: extern "C" fn(ctx: *mut std::ffi::c_void) -> u32) {
     unsafe {
-        INVOKE = Some(std::mem::transmute(invoke));
+        crate::invoker::set_native_invoke(std::mem::transmute(invoke));
     }
 }
 
@@ -271,239 +286,6 @@ pub fn set_canonicalize_ref(canonicalize_ref: CanonicalizeRefFunc) {
     unsafe {
         CANONICALIZE_REF = Some(canonicalize_ref);
     }
-}
-
-#[derive(Debug)]
-enum NativeError {
-    NoMemory,
-    InvokeError,
-    // MemoryAccessError(wasmtime::MemoryAccessError),
-}
-
-#[derive(Debug, Clone, Copy)]
-enum CallResult {
-    WrongArgs,
-    NullResult,
-    TooMuchArgs,
-    NoReturn,
-    NoSpace,
-    OkWithLen(u32),
-    Ok,
-}
-
-impl Into<i32> for CallResult {
-    fn into(self) -> i32 {
-        match self {
-            CallResult::WrongArgs => WRONG_ARGS,
-            CallResult::NullResult => NULL_RESULT,
-            CallResult::TooMuchArgs => TOO_MUCH_ARGS,
-            CallResult::NoReturn => NO_RETURN_VALUE,
-            CallResult::NoSpace => NO_SPACE_IN_BUFFER,
-            CallResult::OkWithLen(len) => len as _,
-            CallResult::Ok => SUCCESS,
-        }
-    }
-}
-
-fn call_native_wrapper(
-    caller: Caller,
-    h1: i32,
-    h2: i32,
-    ptr: i32,
-    len: i32,
-    retval: i32,
-) -> Result<i32, NativeError> {
-    let mut args = None;
-
-    let mem = caller
-        .get_export("memory")
-        .and_then(|ext| ext.into_memory())
-        .ok_or(NativeError::NoMemory)?;
-
-    if len > 0 && ptr != 0 {
-        unsafe {
-            let ptr = mem.data_ptr().add(ptr as _) as *const GuestArg;
-            args = Some(std::slice::from_raw_parts(ptr, len as _));
-        }
-    }
-
-    let h1 = h1 as u32;
-    let h2 = h2 as u32;
-    let hash = ((h1 as u64) << 32) + (h2 as u64);
-
-    let retval = if retval == 0 {
-        None
-    } else {
-        Some(unsafe {
-            let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
-            &*ptr
-        })
-    };
-
-    let resize_func = caller
-        .get_export("__cfx_extend_retval_buffer")
-        .and_then(|export| export.into_func());
-
-    let call_result = call_native(hash, args.unwrap_or_else(|| &[]), mem, retval, resize_func);
-
-    Ok(call_result.into())
-}
-
-fn call_native(
-    hash: u64,
-    args: &[GuestArg],
-    memory: Memory,
-    retval: Option<&ReturnValue>,
-    resize_func: Option<Func>,
-) -> CallResult {
-    let mut ctx = NativeContext::default();
-
-    ctx.native_identifier = hash;
-    ctx.num_arguments = args.len() as _;
-
-    let mem_start = unsafe { memory.data_unchecked().as_ptr() };
-    let ctx_args = ctx.arguments.as_mut_ptr() as *mut u8;
-
-    let mut idx = 0;
-    for arg in args.iter() {
-        if (idx + arg.size as usize) > (ctx.arguments.len() * std::mem::size_of::<usize>()) {
-            return CallResult::TooMuchArgs;
-        }
-
-        unsafe {
-            if arg.is_ref {
-                (ctx_args.add(idx) as *mut usize).write(mem_start.add(arg.value as usize) as _);
-            } else {
-                std::ptr::copy(
-                    mem_start.add(arg.value as usize),
-                    ctx_args.add(idx),
-                    arg.size as _,
-                );
-            }
-        }
-
-        idx += arg.size as usize;
-    }
-
-    if let Some(invoke) = unsafe { INVOKE } {
-        invoke(&mut ctx);
-    }
-
-    if ctx.num_results == 0 || retval.is_none() {
-        return CallResult::Ok;
-    }
-
-    if let Some(retval) = retval {
-        let resize_buffer = |new_size: usize| -> Option<*mut u8> {
-            if let Some(resizer) = resize_func.as_ref() {
-                let ptr = resizer.call(&[Val::I32(new_size as _)]).ok()?;
-
-                ptr.get(0).and_then(|val| val.i32()).and_then(|ptr| {
-                    if ptr == 0 {
-                        None
-                    } else {
-                        Some(unsafe { memory.data_ptr().add(ptr as _) })
-                    }
-                })
-            } else {
-                None
-            }
-        };
-
-        let mut buffer = unsafe { memory.data_ptr().add(retval.buffer as _) };
-        let rettype = ReturnType::from(retval.rettype as u32);
-
-        match rettype {
-            ReturnType::Empty => CallResult::Ok,
-            ReturnType::Number => {
-                if retval.capacity < 8 {
-                    if let Some(new_buffer) = resize_buffer(8) {
-                        buffer = new_buffer
-                    } else {
-                        return CallResult::NoSpace;
-                    }
-                }
-
-                unsafe {
-                    *(buffer as *mut usize) = ctx.arguments[0];
-                }
-
-                return CallResult::OkWithLen(8);
-            }
-
-            ReturnType::String => {
-                if ctx.arguments[0] == 0 {
-                    return CallResult::NullResult;
-                }
-
-                let cstr = unsafe { CStr::from_ptr(ctx.arguments[0] as *const _) };
-                let bytes = cstr.to_bytes();
-                let len = bytes.len();
-
-                if retval.capacity < len as _ {
-                    if let Some(new_buffer) = resize_buffer(len) {
-                        buffer = new_buffer
-                    } else {
-                        return CallResult::NoSpace;
-                    }
-                }
-
-                unsafe {
-                    std::ptr::copy(bytes.as_ptr(), buffer, len);
-                }
-
-                return CallResult::OkWithLen(len as _);
-            }
-
-            ReturnType::Vector3 => {
-                let vec = ctx.arguments.as_ptr() as *const Vector3;
-                let len = std::mem::size_of::<Vector3>();
-
-                if retval.capacity < len as _ {
-                    if let Some(new_buffer) = resize_buffer(len) {
-                        buffer = new_buffer
-                    } else {
-                        return CallResult::NoSpace;
-                    }
-                }
-
-                unsafe {
-                    std::ptr::copy(vec, buffer as *mut _, 1);
-                }
-
-                return CallResult::OkWithLen(len as _);
-            }
-
-            ReturnType::MsgPack => {
-                let scrobj =
-                    unsafe { &*(ctx.arguments.as_ptr() as *const fivem::types::ScrObject) };
-
-                let len = scrobj.length;
-
-                if len == 0 || scrobj.data == 0 {
-                    return CallResult::NullResult;
-                }
-
-                if (retval.capacity as u64) < len {
-                    if let Some(new_buffer) = resize_buffer(len as usize) {
-                        buffer = new_buffer
-                    } else {
-                        return CallResult::NoSpace;
-                    }
-                }
-
-                unsafe {
-                    std::ptr::copy(scrobj.data as *const u8, buffer, len as _);
-                }
-
-                return CallResult::OkWithLen(len as _);
-            }
-
-            ReturnType::Unk => CallResult::NoReturn,
-        };
-    }
-
-    CallResult::NoReturn
 }
 
 fn call_call_ref(
@@ -515,7 +297,7 @@ fn call_call_ref(
     let memory = script.instance.get_memory("memory")?;
     let cfx_call_ref = script
         .instance
-        .get_typed_func::<(i32, i32, i32), i32>("__cfx_call_ref")
+        .get_typed_func::<(i32, i32, i32), i32>(CFX_CALL_REF)
         .ok()?;
 
     let args_guest = script.alloc_bytes(args)?;
@@ -554,89 +336,7 @@ fn call_call_ref(
 
     ret_buf.extend_from_slice(slice);
 
-    // if scrobj.length > ret_buf.capacity() as _ {
-    //     ret_buf.resize(scrobj.length as usize, 0);
-    // }
-
     Some(ret_buf.len() as _)
-}
-
-fn invoke_ref_func_wrapper(
-    caller: Caller,
-    ref_name: i32,
-    args: i32,
-    args_len: i32,
-    buffer: i32,
-    buffer_cap: i32,
-) -> Result<CallResult, NativeError> {
-    let mem = caller
-        .get_export("memory")
-        .and_then(|ext| ext.into_memory())
-        .ok_or(NativeError::NoMemory)?;
-
-    let resize_func = caller
-        .get_export("__cfx_extend_retval_buffer")
-        .and_then(|export| export.into_func());
-
-    if ref_name == 0 || args == 0 {
-        return Ok(CallResult::WrongArgs);
-    }
-
-    let mut ctx = NativeContext::default();
-
-    ctx.native_identifier = 0xE3551879; // INVOKE_FUNCTION_REFERENCE
-    ctx.num_arguments = 4;
-
-    let mut retval_length = 0usize;
-
-    unsafe {
-        ctx.arguments[0] = mem.data_ptr().add(ref_name as _) as _; // char* referenceIdentity
-        ctx.arguments[1] = mem.data_ptr().add(args as _) as _; // char* argsSerialized
-        ctx.arguments[2] = args_len as _; // int argsLength
-        ctx.arguments[3] = &mut retval_length as *mut _ as _; // int* retvalLength
-
-        if let Some(invoke) = INVOKE {
-            if !fx_succeeded(invoke(&mut ctx)) {
-                return Err(NativeError::InvokeError);
-            }
-        }
-    }
-
-    if ctx.num_results == 0 || ctx.arguments[0] == 0 {
-        return Ok(CallResult::NullResult);
-    }
-
-    let resize_buffer = |new_size: usize| -> Option<*mut u8> {
-        if let Some(resizer) = resize_func.as_ref() {
-            let ptr = resizer.call(&[Val::I32(new_size as _)]).ok()?;
-
-            ptr.get(0).and_then(|val| val.i32()).and_then(|ptr| {
-                if ptr == 0 {
-                    None
-                } else {
-                    Some(unsafe { mem.data_ptr().add(ptr as _) })
-                }
-            })
-        } else {
-            None
-        }
-    };
-
-    let buffer = if buffer == 0 || (buffer_cap as usize) < retval_length {
-        resize_buffer(retval_length)
-    } else {
-        unsafe { Some(mem.data_ptr().add(buffer as _)) }
-    };
-
-    if let Some(buffer) = buffer {
-        unsafe {
-            std::ptr::copy(ctx.arguments[0] as *const u8, buffer, retval_length);
-        }
-
-        return Ok(CallResult::OkWithLen(retval_length as _));
-    }
-
-    Ok(CallResult::NoSpace)
 }
 
 fn log(caller: Caller, ptr: i32, len: i32) -> Option<()> {
@@ -674,6 +374,6 @@ fn script_log<T: AsRef<str>>(msg: T) {
     }
 }
 
-fn fx_succeeded(result: u32) -> bool {
+pub fn fx_succeeded(result: u32) -> bool {
     (result & 0x80000000) == 0
 }

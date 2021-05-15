@@ -1,6 +1,10 @@
+use fivem_core::invoker::{invoke, Val};
+use serde::Serialize;
+
 pub mod events {
-    use crate::events::Event;
-    use crate::ref_funcs::ExternRefFunction;
+    use fivem_core::events::Event;
+    use fivem_core::ref_funcs::ExternRefFunction;
+
     use futures::{Stream, StreamExt};
     use serde::{Deserialize, Serialize};
 
@@ -23,6 +27,19 @@ pub mod events {
     }
 
     pub fn player_connecting() -> impl Stream<Item = Event<PlayerConnecting>> {
-        crate::events::subscribe("playerConnecting").boxed_local()
+        fivem_core::events::subscribe("playerConnecting").boxed_local()
+    }
+}
+
+pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
+    if let Ok(payload) = rmp_serde::to_vec(&payload) {
+        let args = &[
+            Val::String(event_name),
+            Val::String(source),
+            Val::Bytes(&payload),
+            Val::Integer(payload.len() as _),
+        ];
+
+        let _ = invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
     }
 }

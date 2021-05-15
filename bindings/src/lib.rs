@@ -1,39 +1,37 @@
-#[cfg(feature = "full")]
-pub mod events;
-#[doc(hidden)]
-#[cfg(feature = "full")]
-pub mod exports;
-#[cfg(feature = "full")]
-pub mod invoker;
-#[cfg(feature = "full")]
-pub mod ref_funcs;
-#[cfg(feature = "full")]
-pub mod runtime;
-#[cfg(feature = "types")]
-pub mod types;
+#[cfg(feature = "server")]
+pub mod server {
+    pub use fivem_server::*;
+}
 
 #[cfg(feature = "client")]
-pub mod client;
-
-#[cfg(feature = "server")]
-pub mod server;
-
-#[cfg(feature = "full")]
-mod ffi {
-    #[link(wasm_import_module = "host")]
-    extern "C" {
-        pub fn log(ptr: i32, len: i32);
-    }
+pub mod client {
+    pub use fivem_client::*;
 }
 
-/// Logs a message to the FiveM server or client
-#[cfg(feature = "full")]
-pub fn log<T: AsRef<str>>(message: T) {
-    let msg = message.as_ref();
-    let cstr = std::ffi::CString::new(msg).unwrap();
-    let bytes = cstr.as_bytes_with_nul();
+pub mod events {
+    pub use fivem_core::events::{emit, subscribe, subscribe_raw, Event, RawEvent};
 
-    unsafe {
-        ffi::log(bytes.as_ptr() as _, bytes.len() as _);
-    }
+    #[cfg(feature = "server")]
+    pub use fivem_server::emit_net;
+
+    #[cfg(feature = "client")]
+    pub use fivem_client::emit_net;
 }
+
+pub mod runtime {
+    pub use fivem_core::runtime::spawn;
+}
+
+pub mod invoker {
+    pub use fivem_core::invoker::{invoke, InvokeError, Val};
+}
+
+pub mod types {
+    pub use fivem_core::types::{Packed, Vector3};
+}
+
+pub mod ref_funcs {
+    pub use fivem_core::ref_funcs::{ExternRefFunction, RefFunction};
+}
+
+pub use fivem_core::log;

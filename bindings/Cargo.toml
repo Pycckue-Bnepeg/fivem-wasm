@@ -5,13 +5,11 @@ authors = ["ZOTTCE <zottce@gmail.com>"]
 edition = "2018"
 
 [features]
-default = ["full"]
-types = []
-client = []
-server = []
-full = ["types", "futures", "serde"]
+default = []
+server = ["fivem-server"]
+client = ["fivem-client"]
 
 [dependencies]
-rmp-serde = "0.15.4"
-futures = { version = "0.3.14", features = ["executor"], optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true }
+fivem-core = { path = "core/" }
+fivem-client = { path = "client/", optional = true }
+fivem-server = { path = "server/", optional = true }

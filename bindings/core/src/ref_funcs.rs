@@ -2,7 +2,6 @@ use crate::types::ScrObject;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-#[doc(hidden)]
 mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
@@ -17,7 +16,6 @@ thread_local! {
 }
 
 #[no_mangle]
-#[doc(hidden)]
 pub unsafe extern "C" fn __cfx_call_ref(
     ref_idx: u32,
     args: *const u8,
@@ -54,7 +52,6 @@ pub unsafe extern "C" fn __cfx_call_ref(
 }
 
 #[no_mangle]
-#[doc(hidden)]
 pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
     HANDLERS.with(|handlers| {
         let handlers = handlers.borrow();
@@ -67,7 +64,6 @@ pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
 }
 
 #[no_mangle]
-#[doc(hidden)]
 pub unsafe extern "C" fn __cfx_remove_ref(ref_idx: u32) {
     HANDLERS.with(|handlers| {
         let mut handlers = handlers.borrow_mut();

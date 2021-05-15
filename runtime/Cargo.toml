@@ -7,5 +7,5 @@ edition = "2018"
 [dependencies]
 wasmtime = "0.26.0"
 wasmtime-wasi = "0.26.0"
-fivem = { path = "../bindings", default-features = false, features = ["types"] }
+fivem-core = { path = "../bindings/core", default-features = false, features = ["types"] }
 anyhow = "1.0"

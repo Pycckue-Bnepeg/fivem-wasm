@@ -3,7 +3,6 @@ use serde::de::DeserializeOwned;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
-///
 pub enum ReturnType {
     Empty = 0,
     Number,
@@ -86,55 +85,6 @@ unsafe impl RetVal for () {
     }
 }
 
-unsafe impl RetVal for f32 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const f32).read()
-    }
-}
-
-unsafe impl RetVal for u32 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const u32).read()
-    }
-}
-
-// TODO: macro
-unsafe impl RetVal for i32 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const i32).read()
-    }
-}
-
-unsafe impl RetVal for u64 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const u64).read()
-    }
-}
-
-unsafe impl RetVal for i64 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const i64).read()
-    }
-}
-
-unsafe impl RetVal for f64 {
-    const IDENT: ReturnType = ReturnType::Number;
-
-    unsafe fn convert(bytes: &[u8]) -> Self {
-        (bytes.as_ptr() as *const f64).read()
-    }
-}
-
 unsafe impl RetVal for String {
     const IDENT: ReturnType = ReturnType::String;
 
@@ -167,6 +117,23 @@ pub unsafe trait RetVal {
     unsafe fn convert(bytes: &[u8]) -> Self;
 }
 
+macro_rules! impl_for_primitives {
+    ($($type:ty),*) => {
+        $(unsafe impl RetVal for $type {
+            const IDENT: ReturnType = ReturnType::Number;
+
+            unsafe fn convert(bytes: &[u8]) -> Self {
+                (bytes.as_ptr() as *const $type).read()
+            }
+        })*
+    };
+}
+
+impl_for_primitives! {
+    i8, u8, i16, u16, i32, u32, i64, u64,
+    f32, f64
+}
+
 #[repr(C)]
 #[derive(Default)]
 pub struct GuestArg {
@@ -191,7 +158,7 @@ impl GuestArg {
 
 pub mod call_result {
     pub const SUCCESS: i32 = 0;
-    pub const NO_SPACE_IN_BUFFER: i32 = -1;
+    pub const SMALL_RETURN_BUFFER: i32 = -1;
     pub const NO_RETURN_VALUE: i32 = -2;
     pub const TOO_MUCH_ARGS: i32 = -3;
     pub const NULL_RESULT: i32 = -4;

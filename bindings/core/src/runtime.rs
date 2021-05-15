@@ -15,7 +15,6 @@ pub fn spawn<Fut: Future<Output = ()> + 'static>(future: Fut) -> Result<(), Spaw
     SPAWNER.with(|sp| sp.borrow().spawn_local(future))
 }
 
-#[doc(hidden)]
 #[no_mangle]
 pub extern "C" fn __cfx_on_tick() {
     LOCAL_POOL.with(|lp| {

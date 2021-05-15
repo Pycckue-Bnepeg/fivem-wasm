@@ -3,6 +3,9 @@ members = [
     "runtime",
     "glue",
     "bindings",
+    "bindings/core",
+    "bindings/client",
+    "bindings/server",
 
     # test
     "standalone",

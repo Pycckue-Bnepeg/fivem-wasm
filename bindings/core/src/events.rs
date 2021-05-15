@@ -8,16 +8,20 @@ use std::{cell::RefCell, collections::HashMap, ffi::CStr};
 
 use crate::invoker::Val;
 
+/// A raw event contains bytes from the emitters.
 #[derive(Debug)]
-struct InternalEvent {
-    name: String,
-    source: String,
-    payload: Vec<u8>,
+pub struct RawEvent {
+    /// A name of an event
+    pub name: String,
+    /// A source who triggered an event
+    pub source: String,
+    /// Payload of an event
+    pub payload: Vec<u8>,
 }
 
 // TODO: Vec<UnboundedSender<Event>>
 thread_local! {
-    static EVENTS: RefCell<HashMap<String, UnboundedSender<InternalEvent>>> = RefCell::new(HashMap::new());
+    static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
 }
 
 #[doc(hidden)]
@@ -32,7 +36,7 @@ pub unsafe extern "C" fn __cfx_on_event(
     let payload = Vec::from(std::slice::from_raw_parts(args, args_length as _));
     let source = CStr::from_ptr(source).to_str().unwrap().to_owned();
 
-    let event = InternalEvent {
+    let event = RawEvent {
         name,
         payload,
         source,
@@ -70,12 +74,51 @@ impl<T: DeserializeOwned> Event<T> {
         &self.payload
     }
 
+    /// Consumes `Event<T>` and returns inner `T`.
     pub fn into_inner(self) -> T {
         self.payload
     }
 }
 
+/// Subscribes on an event with the given name.
+///
+/// Every time that an event is triggered this function decodes a raw message using messagepack.
+///
+/// # Example
+/// ```rust,ignore
+/// # use std::error::Error;
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// struct GiveMoney {
+///     to: String, // player name
+///     amount: u32 // amount of money
+/// }
+///
+/// let events = fivem::events::subscribe::<GiveMoney>("myCustomEvent");
+///
+/// while let Some(event) = events.next().await {
+///     let source = event.source.clone();
+///     let name_from_src = ...;
+///     let data = event.into_inner(); // consume an event and take GiveMoney
+///     let msg = format!("{} wants to give {} ${}", name_from_src, data.to, data.amount);
+/// }
+/// # Ok(())
+/// # }
+///
 pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Event<T>> {
+    subscribe_raw(event_name)
+        .filter_map(|event| async move {
+            rmp_serde::from_read(event.payload.as_slice())
+                .ok()
+                .map(|payload| (event, payload))
+        })
+        .map(|(event, payload)| Event {
+            source: event.source,
+            payload,
+        })
+}
+
+/// Same as [`subscribe`] but returns [`RawEvent`].
+pub fn subscribe_raw(event_name: &str) -> impl Stream<Item = RawEvent> {
     let (tx, rx) = unbounded();
 
     EVENTS.with(|events| {
@@ -85,17 +128,10 @@ pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Ev
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
 
-    rx.filter_map(|event| async move {
-        rmp_serde::from_read(event.payload.as_slice())
-            .ok()
-            .map(|payload| (event, payload))
-    })
-    .map(|(event, payload)| Event {
-        source: event.source,
-        payload,
-    })
+    rx
 }
 
+/// Emits a local event.
 pub fn emit<T: Serialize>(event_name: &str, payload: T) {
     if let Ok(payload) = rmp_serde::to_vec(&payload) {
         let args = &[
@@ -108,6 +144,7 @@ pub fn emit<T: Serialize>(event_name: &str, payload: T) {
     }
 }
 
+#[cfg(feature = "server")]
 pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
     if let Ok(payload) = rmp_serde::to_vec(&payload) {
         let args = &[
@@ -118,5 +155,18 @@ pub fn emit_net<T: Serialize>(event_name: &str, source: &str, payload: T) {
         ];
 
         let _ = crate::invoker::invoke::<(), _>(0x2F7A49E6, args); // TRIGGER_CLIENT_EVENT_INTERNAL
+    }
+}
+
+#[cfg(feature = "client")]
+pub fn emit_net<T: Serialize>(event_name: &str, payload: T) {
+    if let Ok(payload) = rmp_serde::to_vec(&payload) {
+        let args = &[
+            Val::String(event_name),
+            Val::Bytes(&payload),
+            Val::Integer(payload.len() as _),
+        ];
+
+        let _ = crate::invoker::invoke::<(), _>(0x7FDD1128, args); // TRIGGER_SERVER_EVENT_INTERNAL
     }
 }
