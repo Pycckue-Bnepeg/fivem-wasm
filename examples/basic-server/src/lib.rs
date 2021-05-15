@@ -22,25 +22,19 @@ async fn show_something(event: PlayerConnecting) {
     event.deferrals.defer.invoke::<(), ()>(());
 
     #[derive(Serialize)]
-    struct UpdateMessage {
-        message: String,
-    }
+    struct UpdateMessage(String);
 
     #[derive(Serialize)]
-    struct DoneMessage {
-        // failure_message: Option<String>,
-    }
+    struct DoneMessage(String);
 
-    let udp_msg = UpdateMessage {
-        message: String::from("Hello from Rust!"),
-    };
+    let udp_msg = UpdateMessage(String::from("Hello from Rust!"));
 
-    let done_msg = DoneMessage {
-        // failure_message: None,
-    };
+    event.deferrals.update.invoke::<(), _>(vec![udp_msg]);
+    event.deferrals.done.invoke::<(), Vec<DoneMessage>>(vec![]);
 
-    event.deferrals.update.invoke::<(), _>(&udp_msg);
-    event.deferrals.done.invoke::<(), _>(&done_msg);
+    // reject a connection
+    // let done_msg = DoneMessage(String::from("do not enter!!"));
+    // event.deferrals.done.invoke::<(), _>(vec![done_msg]);
 }
 
 mod kvp {
@@ -100,43 +94,30 @@ fn print_my_keys() {
     println!("DONE FINDING KEYS");
 }
 
-fn test_exports() {
+async fn test_exports() {
     #[derive(Debug, Serialize, Deserialize)]
-    struct Export {
-        export_data: ExternRefFunction,
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Something {
-        something: String,
-    }
+    struct Export(ExternRefFunction);
 
     #[derive(Serialize, Deserialize)]
-    struct SomeObject {
-        first: u64,
-        second: f32,
-        third: String,
-    }
+    struct SomeObject(u32, f32, String);
 
+    // exports("testique", (a, b, c) => console.log(`int: ${a} float: ${b} str: ${c}));
     let export = format!("__cfx_export_emitjs_testique");
 
-    let func = RefFunction::new(|input: Export| {
-        fivem::log(format!("what {:?}", input));
+    let func = RefFunction::new(|input: Vec<Export>| {
+        input[0]
+            .0
+            .invoke::<(), _>(SomeObject(5123, 10.5, String::from("hellow!")));
 
-        input.export_data.invoke::<(), _>(&SomeObject {
-            first: 5123,
-            second: 10.5,
-            third: String::from("hellow!"),
-        });
-
-        Something {
-            something: String::from("something ..."),
-        }
+        vec![true]
     });
 
     let export_data = func.as_extern_ref_func();
 
-    fivem::events::emit(&export, Export { export_data });
+    // kind of hacky, another runtimes expect AN ARRAY of arguments, so, with only one argument
+    // this is our choice to create a vec
+    // but when we have 2+ arguments we can use a newtype struct that will be encoded as an array.
+    fivem::events::emit(&export, vec![Export(export_data)]);
 }
 
 #[no_mangle]
@@ -163,8 +144,8 @@ pub extern "C" fn _start() {
     println!("{:?}", kvp::resource_kvp_float("my:float"));
 
     print_my_keys();
-    test_exports();
-
+    let task = test_exports();
+    let _ = fivem::runtime::spawn(task);
     let task = handle_connections();
     let _ = fivem::runtime::spawn(task);
 }

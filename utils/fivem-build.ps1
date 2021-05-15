@@ -19,7 +19,7 @@ Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\basic_serve
 
 Push-Location -Path "E:\sources\c\fivem-fork\code" -StackName FiveMWasm;
 
-# .\tools\ci\premake5.exe vs2019 --game=server
+.\tools\ci\premake5.exe vs2019 --game=server
 # .\tools\ci\premake5.exe vs2019 --game=five
 
 # Push-Location -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin" -StackName FiveMWasm;

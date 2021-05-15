@@ -133,7 +133,7 @@ pub fn subscribe_raw(event_name: &str) -> impl Stream<Item = RawEvent> {
 
 /// Emits a local event.
 pub fn emit<T: Serialize>(event_name: &str, payload: T) {
-    if let Ok(payload) = rmp_serde::to_vec(&payload) {
+    if let Ok(payload) = rmp_serde::to_vec_named(&payload) {
         let args = &[
             Val::String(event_name),
             Val::Bytes(&payload),

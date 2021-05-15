@@ -1,58 +1,56 @@
-use std::collections::HashMap;
-
 use fivem::ref_funcs::{ExternRefFunction, RefFunction};
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-struct Export {
-    export_data: ExternRefFunction,
-}
+struct Export(ExternRefFunction);
 
 // hack!
 macro_rules! cfx_export {
     ($res:expr, $exp:expr) => {{
-        #[derive(serde::Deserialize, serde::Serialize)]
-        struct Export {
-            export_data: fivem::ref_funcs::ExternRefFunction,
-        }
-
         let link = std::rc::Rc::new(std::cell::RefCell::new(None));
         let link_clone = link.clone();
         let export0 = format!("__cfx_export_{}_{}", $res, $exp);
 
-        let func = fivem::ref_funcs::RefFunction::new(move |input: Export| -> Vec<u8> {
-            *link_clone.borrow_mut() = Some(input.export_data.clone());
+        let func = fivem::ref_funcs::RefFunction::new(move |input: Vec<Export>| -> Vec<bool> {
+            *link_clone.borrow_mut() = Some(input[0].0.clone());
 
-            vec![]
+            vec![true]
         });
 
         let export_data = func.as_extern_ref_func();
-        fivem::events::emit(&export0, Export { export_data });
+        fivem::events::emit(&export0, vec![Export(export_data)]);
 
         link
     }};
 }
 
-#[derive(Serialize)]
-struct Pos {
+#[derive(Debug, Serialize, Deserialize)]
+struct SpawnInfo {
     x: f32,
     y: f32,
     z: f32,
+    heading: f32,
+    idx: u32,
+    model: u64,
+
+    #[serde(rename = "skipFade")]
+    skip_fade: bool,
 }
 
 #[derive(Serialize)]
-struct SpawnPlayer {
-    pos: HashMap<String, f32>,
-    on_spawn: ExternRefFunction,
-}
+struct SpawnPlayer(SpawnInfo, ExternRefFunction);
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    const POS: Pos = Pos {
+    const SPAWN_INFO: SpawnInfo = SpawnInfo {
         x: 686.245,
         y: 577.950,
         z: 130.461,
+
+        heading: 0.0,
+        idx: 0,
+        model: 0x5761f4ad, // g_m_m_mexboss_01
+        skip_fade: false,
     };
 
     let set_callback = cfx_export!("spawnmanager", "setAutoSpawnCallback");
@@ -61,21 +59,17 @@ pub extern "C" fn _start() {
     let force_respawn = cfx_export!("spawnmanager", "forceRespawn");
 
     let task = async move {
-        let on_spawn = RefFunction::new(|_: Vec<()>| -> Vec<u8> { vec![] });
-        let callback = RefFunction::new(move |_: Vec<()>| -> Vec<u8> {
-            let mut pos = HashMap::new();
-            pos.insert("x".to_owned(), POS.x);
-            pos.insert("y".to_owned(), POS.y);
-            pos.insert("z".to_owned(), POS.z);
+        let on_spawn = RefFunction::new(|spawn_info: Vec<SpawnInfo>| -> Vec<bool> {
+            fivem::log(format!("player spawned: {:?}", spawn_info));
+            vec![true]
+        });
 
+        let callback = RefFunction::new(move |_: Vec<()>| -> Vec<u8> {
             spawn_player
                 .borrow()
                 .as_ref()
                 .unwrap()
-                .invoke::<(), _>(SpawnPlayer {
-                    pos,
-                    on_spawn: on_spawn.as_extern_ref_func(),
-                });
+                .invoke::<(), _>(SpawnPlayer(SPAWN_INFO, on_spawn.as_extern_ref_func()));
 
             vec![]
         });

@@ -1,4 +1,6 @@
-// use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 // #[derive(Debug, Serialize, Deserialize)]
 // #[serde(rename = "_ExtStruct")]
@@ -45,4 +47,53 @@ fn main() {
     // println!("{:?}", string);
 
     // println!("{:#?}", result);
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(rename = "_ExtStruct")]
+    pub struct ExternRefFunction((i8, serde_bytes::ByteBuf));
+
+    impl ExternRefFunction {
+        pub(crate) fn new(name: &str) -> ExternRefFunction {
+            let bytes = serde_bytes::ByteBuf::from(name.bytes().collect::<Vec<u8>>());
+            ExternRefFunction((10, bytes))
+        }
+    }
+
+    #[derive(Serialize)]
+    struct Pos {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
+
+    #[derive(Serialize)]
+    struct SpawnPlayer(Pos, ExternRefFunction);
+
+    #[derive(Serialize)]
+    struct Shit {
+        position: HashMap<String, f32>,
+        func: ExternRefFunction,
+    }
+
+    let spawn = SpawnPlayer(
+        Pos {
+            x: 51.0,
+            y: 60.0,
+            z: 31.0,
+        },
+        ExternRefFunction::new("cool:3325:1"),
+    );
+
+    let mut position = HashMap::new();
+    position.insert("x".to_owned(), 51.0);
+    position.insert("y".to_owned(), 60.0);
+    position.insert("z".to_owned(), 31.0);
+
+    let shit = Shit {
+        position,
+        func: ExternRefFunction::new("cool:3325:1"),
+    };
+
+    println!("{:?}", rmp_serde::to_vec(&shit));
+    println!("{:?}", rmp_serde::to_vec_named(&spawn));
 }

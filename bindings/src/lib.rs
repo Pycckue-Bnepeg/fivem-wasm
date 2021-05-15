@@ -14,8 +14,8 @@ pub mod events {
     #[cfg(feature = "server")]
     pub use fivem_server::emit_net;
 
-    #[cfg(feature = "client")]
-    pub use fivem_client::emit_net;
+    // #[cfg(feature = "client")]
+    // pub use fivem_client::emit_net;
 }
 
 pub mod runtime {

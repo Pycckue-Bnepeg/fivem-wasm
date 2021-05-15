@@ -202,7 +202,7 @@ where
     Out: DeserializeOwned,
 {
     let ref_name = std::ffi::CString::new(func.name()).ok()?;
-    let args = rmp_serde::to_vec(&args).ok()?;
+    let args = rmp_serde::to_vec_named(&args).ok()?;
 
     let (buffer, buffer_capacity) = RETVAL_BUFFER.with(|buf| {
         let mut buffer = buf.borrow_mut();
