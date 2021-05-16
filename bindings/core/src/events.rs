@@ -19,9 +19,15 @@ pub struct RawEvent {
     pub payload: Vec<u8>,
 }
 
+enum EventHandler {
+    Future(UnboundedSender<RawEvent>),
+    Function(Box<dyn FnMut(RawEvent) + 'static>),
+}
+
 // TODO: Vec<UnboundedSender<Event>>
 thread_local! {
-    static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
+    // static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
+    static EVENTS: RefCell<HashMap<String, EventHandler>> = RefCell::new(HashMap::new());
 }
 
 #[doc(hidden)]
@@ -43,16 +49,24 @@ pub unsafe extern "C" fn __cfx_on_event(
     };
 
     EVENTS.with(|events| {
-        let events = events.borrow();
+        let mut events = events.borrow_mut();
 
-        if let Some(sender) = events.get(&event.name) {
-            let _ = sender.unbounded_send(event);
+        if let Some(handler) = events.get_mut(&event.name) {
+            match handler {
+                EventHandler::Function(func) => {
+                    func(event);
+                }
+                EventHandler::Future(sender) => {
+                    let _ = sender.unbounded_send(event);
+                }
+            }
         }
     });
 
     crate::runtime::LOCAL_POOL.with(|lp| {
-        let mut lp = lp.borrow_mut();
-        lp.run_until_stalled();
+        if let Ok(mut lp) = lp.try_borrow_mut() {
+            lp.run_until_stalled();
+        }
     });
 }
 
@@ -123,12 +137,50 @@ pub fn subscribe_raw(event_name: &str) -> impl Stream<Item = RawEvent> {
 
     EVENTS.with(|events| {
         let mut events = events.borrow_mut();
-        events.insert(event_name.to_owned(), tx);
+        events.insert(event_name.to_owned(), EventHandler::Future(tx));
     });
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
 
     rx
+}
+
+/// Sets an event handler.
+///
+/// The main difference between [`subscribe`] and [`set_event_handler`] is that
+/// the last one calls the passed handler immediately after an event is triggered.
+///
+/// It is useful for events that contains [`crate::ref_funcs::ExternRefFunction`] to call it.
+/// Internaly this function is used in [`crate::exports::make_export`].
+pub fn set_event_handler<In, Handler>(event_name: &str, mut handler: Handler)
+where
+    Handler: FnMut(Event<In>) + 'static,
+    In: DeserializeOwned,
+{
+    let raw_handler = move |raw_event: RawEvent| {
+        let event = rmp_serde::from_read(raw_event.payload.as_slice())
+            .ok()
+            .map(|payload| (raw_event, payload));
+
+        if let Some((event, payload)) = event {
+            let event = Event {
+                source: event.source,
+                payload,
+            };
+
+            handler(event);
+        }
+    };
+
+    EVENTS.with(|events| {
+        let mut events = events.borrow_mut();
+        events.insert(
+            event_name.to_owned(),
+            EventHandler::Function(Box::new(raw_handler)),
+        );
+    });
+
+    let _ = crate::invoker::register_resource_as_event_handler(event_name);
 }
 
 /// Emits a local event.

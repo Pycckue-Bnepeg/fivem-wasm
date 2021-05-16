@@ -1,7 +1,4 @@
-use fivem::{
-    ref_funcs::{ExternRefFunction, RefFunction},
-    server::events::PlayerConnecting,
-};
+use fivem::{ref_funcs::RefFunction, server::events::PlayerConnecting};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
@@ -94,30 +91,33 @@ fn print_my_keys() {
     println!("DONE FINDING KEYS");
 }
 
-async fn test_exports() {
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Export(ExternRefFunction);
+fn create_export() {
+    #[derive(Debug, Deserialize)]
+    struct Vector {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
 
+    let export = RefFunction::new(|vector: Vec<Vector>| {
+        if let Some(vec) = vector.get(0) {
+            let length = (vec.x.powi(2) + vec.y.powi(2) + vec.z.powi(2)).sqrt();
+            return vec![length];
+        }
+
+        vec![0.0]
+    });
+
+    fivem::exports::make_export("vecLength", export);
+}
+
+async fn test_exports() {
     #[derive(Serialize, Deserialize)]
     struct SomeObject(u32, f32, String);
 
     // exports("testique", (a, b, c) => console.log(`int: ${a} float: ${b} str: ${c}));
-    let export = format!("__cfx_export_emitjs_testique");
-
-    let func = RefFunction::new(|input: Vec<Export>| {
-        input[0]
-            .0
-            .invoke::<(), _>(SomeObject(5123, 10.5, String::from("hellow!")));
-
-        vec![true]
-    });
-
-    let export_data = func.as_extern_ref_func();
-
-    // kind of hacky, another runtimes expect AN ARRAY of arguments, so, with only one argument
-    // this is our choice to create a vec
-    // but when we have 2+ arguments we can use a newtype struct that will be encoded as an array.
-    fivem::events::emit(&export, vec![Export(export_data)]);
+    let testique = fivem::exports::import_function("emitjs", "testique").unwrap();
+    testique.invoke::<(), _>(SomeObject(5123, 10.5, String::from("hellow!")));
 }
 
 #[no_mangle]
@@ -144,6 +144,8 @@ pub extern "C" fn _start() {
     println!("{:?}", kvp::resource_kvp_float("my:float"));
 
     print_my_keys();
+    create_export();
+
     let task = test_exports();
     let _ = fivem::runtime::spawn(task);
     let task = handle_connections();

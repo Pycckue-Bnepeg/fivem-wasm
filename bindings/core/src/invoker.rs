@@ -236,3 +236,8 @@ where
 pub fn register_resource_as_event_handler(event: &str) -> Result<(), InvokeError> {
     invoke(0xD233A168, &[Val::String(event)])
 }
+
+/// Gets a name of the current resource.
+pub fn current_resource_name() -> Result<String, InvokeError> {
+    invoke(0xE5E9EBBB, &[])
+}

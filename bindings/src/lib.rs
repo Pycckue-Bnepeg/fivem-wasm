@@ -9,7 +9,9 @@ pub mod client {
 }
 
 pub mod events {
-    pub use fivem_core::events::{emit, subscribe, subscribe_raw, Event, RawEvent};
+    pub use fivem_core::events::{
+        emit, set_event_handler, subscribe, subscribe_raw, Event, RawEvent,
+    };
 
     #[cfg(feature = "server")]
     pub use fivem_server::emit_net;
@@ -32,6 +34,10 @@ pub mod types {
 
 pub mod ref_funcs {
     pub use fivem_core::ref_funcs::{ExternRefFunction, RefFunction};
+}
+
+pub mod exports {
+    pub use fivem_core::exports::{import_function, make_export};
 }
 
 pub use fivem_core::log;

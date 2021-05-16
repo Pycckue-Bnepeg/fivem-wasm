@@ -1,29 +1,6 @@
 use fivem::ref_funcs::{ExternRefFunction, RefFunction};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-struct Export(ExternRefFunction);
-
-// hack!
-macro_rules! cfx_export {
-    ($res:expr, $exp:expr) => {{
-        let link = std::rc::Rc::new(std::cell::RefCell::new(None));
-        let link_clone = link.clone();
-        let export0 = format!("__cfx_export_{}_{}", $res, $exp);
-
-        let func = fivem::ref_funcs::RefFunction::new(move |input: Vec<Export>| -> Vec<bool> {
-            *link_clone.borrow_mut() = Some(input[0].0.clone());
-
-            vec![true]
-        });
-
-        let export_data = func.as_extern_ref_func();
-        fivem::events::emit(&export0, vec![Export(export_data)]);
-
-        link
-    }};
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct SpawnInfo {
     x: f32,
@@ -53,10 +30,11 @@ pub extern "C" fn _start() {
         skip_fade: false,
     };
 
-    let set_callback = cfx_export!("spawnmanager", "setAutoSpawnCallback");
-    let spawn_player = cfx_export!("spawnmanager", "spawnPlayer");
-    let set_autospawn = cfx_export!("spawnmanager", "setAutoSpawn");
-    let force_respawn = cfx_export!("spawnmanager", "forceRespawn");
+    let set_callback =
+        fivem::exports::import_function("spawnmanager", "setAutoSpawnCallback").unwrap();
+    let spawn_player = fivem::exports::import_function("spawnmanager", "spawnPlayer").unwrap();
+    let set_autospawn = fivem::exports::import_function("spawnmanager", "setAutoSpawn").unwrap();
+    let force_respawn = fivem::exports::import_function("spawnmanager", "forceRespawn").unwrap();
 
     let task = async move {
         let on_spawn = RefFunction::new(|spawn_info: Vec<SpawnInfo>| -> Vec<bool> {
@@ -65,35 +43,14 @@ pub extern "C" fn _start() {
         });
 
         let callback = RefFunction::new(move |_: Vec<()>| -> Vec<u8> {
-            spawn_player
-                .borrow()
-                .as_ref()
-                .unwrap()
-                .invoke::<(), _>(SpawnPlayer(SPAWN_INFO, on_spawn.as_extern_ref_func()));
-
+            spawn_player.invoke::<(), _>(SpawnPlayer(SPAWN_INFO, on_spawn.as_extern_ref_func()));
             vec![]
         });
 
-        set_callback
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .invoke::<(), _>(vec![callback.as_extern_ref_func()]);
-
-        set_autospawn
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .invoke::<(), _>(vec![true]);
-
-        force_respawn
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .invoke::<(), Vec<u8>>(vec![]);
+        set_callback.invoke::<(), _>(vec![callback.as_extern_ref_func()]);
+        set_autospawn.invoke::<(), _>(vec![true]);
+        force_respawn.invoke::<(), Vec<u8>>(vec![]);
     };
-
-    fivem::log("started ...");
 
     let _ = fivem::runtime::spawn(task);
 }
