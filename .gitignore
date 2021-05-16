@@ -1,2 +1,3 @@
 target/
 *.h
+utils/components.json

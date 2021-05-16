@@ -21,7 +21,7 @@ pub mod events {
 }
 
 pub mod runtime {
-    pub use fivem_core::runtime::spawn;
+    pub use fivem_core::runtime::{sleep_for, spawn};
 }
 
 pub mod invoker {

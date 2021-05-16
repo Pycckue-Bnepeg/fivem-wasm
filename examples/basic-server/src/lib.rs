@@ -18,15 +18,18 @@ async fn handle_connections() {
 async fn show_something(event: PlayerConnecting) {
     event.deferrals.defer.invoke::<(), ()>(());
 
+    fivem::runtime::sleep_for(std::time::Duration::from_millis(10)).await;
+
     #[derive(Serialize)]
     struct UpdateMessage(String);
 
     #[derive(Serialize)]
     struct DoneMessage(String);
 
-    let udp_msg = UpdateMessage(String::from("Hello from Rust!"));
+    let udp_msg = UpdateMessage(String::from("Hello from Rust! Wait 5 seconds, please ..."));
 
     event.deferrals.update.invoke::<(), _>(vec![udp_msg]);
+    fivem::runtime::sleep_for(std::time::Duration::from_secs(5)).await;
     event.deferrals.done.invoke::<(), Vec<DoneMessage>>(vec![]);
 
     // reject a connection
