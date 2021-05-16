@@ -67,8 +67,7 @@ impl Into<i32> for CallResult {
 
 pub fn call_native_wrapper(
     caller: Caller,
-    h1: i32,
-    h2: i32,
+    hash: u64,
     ptr: i32,
     len: i32,
     retval: i32,
@@ -87,16 +86,12 @@ pub fn call_native_wrapper(
         }
     }
 
-    let h1 = h1 as u32;
-    let h2 = h2 as u32;
-    let hash = ((h1 as u64) << 32) + (h2 as u64);
-
     let retval = if retval == 0 {
         None
     } else {
         Some(unsafe {
             let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
-            &*ptr
+            (*ptr).clone()
         })
     };
 
@@ -113,7 +108,7 @@ fn call_native(
     hash: u64,
     args: &[GuestArg],
     memory: Memory,
-    retval: Option<&ReturnValue>,
+    retval: Option<ReturnValue>,
     resize_func: Option<Func>,
 ) -> Result<CallResult, NativeError> {
     let mut ctx = NativeContext::default();

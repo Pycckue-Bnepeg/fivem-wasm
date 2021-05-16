@@ -16,8 +16,7 @@ pub mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
         pub fn invoke(
-            hash_hi: i32,
-            hash_lo: i32,
+            hash: u64,
             ptr: *const crate::types::GuestArg,
             len: usize,
             retval: *const crate::types::ReturnValue,
@@ -81,9 +80,6 @@ where
     Args: IntoIterator<Item = &'a Val<'a>>,
 {
     let iter = arguments.into_iter();
-
-    let hash_hi = (hash >> 32) as i32;
-    let hash_lo = (hash & 0xFFFFFFFF) as i32;
 
     let mut args: Vec<GuestArg> = Vec::new();
     let mut strings = Vec::new(); // cleanup memory after a call
@@ -169,13 +165,7 @@ where
     RETVAL_BUFFER.with(|buf| unsafe {
         let retval = ReturnValue::new::<Ret>(&buf.borrow());
 
-        let ret_len = ffi::invoke(
-            hash_hi,
-            hash_lo,
-            args.as_ptr(),
-            args.len(),
-            (&retval) as *const _,
-        );
+        let ret_len = ffi::invoke(hash, args.as_ptr(), args.len(), (&retval) as *const _);
 
         if ret_len == call_result::NULL_RESULT {
             return Err(InvokeError::NullResult);

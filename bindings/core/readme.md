@@ -6,8 +6,7 @@ module name: `host`
 
 exports:
 * `log(ptr: u32, len: u32)`
-* `invoke(hash_hi: u32, hash_lo: u32, ptr: *const u8, len: usize, retval: *const ReturnValue)`
-    * `hash_hi, hash_lo` - 64bit hash of native function divided in two parts.
+* `invoke(hash: u64, ptr: *const u8, len: usize, retval: *const ReturnValue)`
     * `ptr, len` - a pointer to an array of pointers to arguments
 
 ```Rust

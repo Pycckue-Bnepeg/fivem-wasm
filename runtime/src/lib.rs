@@ -191,8 +191,8 @@ impl ScriptModule {
         linker.func(
             HOST,
             HOST_INVOKE,
-            |caller: Caller, h1: i32, h2: i32, ptr: i32, len: i32, retval: i32| -> i32 {
-                match crate::invoker::call_native_wrapper(caller, h1, h2, ptr, len, retval) {
+            |caller: Caller, hash: u64, ptr: i32, len: i32, retval: i32| -> i32 {
+                match crate::invoker::call_native_wrapper(caller, hash, ptr, len, retval) {
                     Ok(result) => result.into(),
                     Err(err) => {
                         script_log(format!("{}::{} error: {:?}", HOST, HOST_INVOKE, err));

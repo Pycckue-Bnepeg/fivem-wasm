@@ -26,7 +26,7 @@ impl From<u32> for ReturnType {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReturnValue {
     pub rettype: ReturnType,
     pub buffer: u32, // ptr
