@@ -2,6 +2,8 @@
 members = [
     "runtime",
     "glue",
+    "natives-gen",
+
     "bindings",
     "bindings/core",
     "bindings/client",

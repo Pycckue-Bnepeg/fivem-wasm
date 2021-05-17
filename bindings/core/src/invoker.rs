@@ -1,6 +1,6 @@
 use crate::{
     ref_funcs::{ExternRefFunction, RefFunction},
-    types::{call_result, GuestArg, RetVal, ReturnValue, Vector3},
+    types::{call_result, CharPtr, GuestArg, RetVal, ReturnValue, Vector3},
 };
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -46,14 +46,17 @@ pub enum Val<'a> {
     RefInteger(&'a u32),
     RefFloat(&'a f32),
     RefLong(&'a u64),
+    RefBool(&'a bool),
 
     MutRefInteger(&'a mut u32),
     MutRefFloat(&'a mut f32),
     MutRefLong(&'a mut u64),
+    MutRefBool(&'a mut bool),
 
     Integer(u32),
     Float(f32),
     Long(u64),
+    Bool(bool),
 
     Vector3(Vector3),
     RefVector3(&'a Vector3),
@@ -64,6 +67,49 @@ pub enum Val<'a> {
     MutBytes(&'a mut [u8]),
 
     RefFunc(RefFunction),
+}
+
+macro_rules! impl_from {
+    ($type:ty, $val:ident, $ref:ident, $mut:ident) => {
+        impl<'a> From<$type> for Val<'a> {
+            fn from(val: $type) -> Val<'a> {
+                Val::$val(val)
+            }
+        }
+
+        impl<'a> From<&'a $type> for Val<'a> {
+            fn from(val: &'a $type) -> Val<'a> {
+                Val::$ref(val)
+            }
+        }
+
+        impl<'a> From<&'a mut $type> for Val<'a> {
+            fn from(val: &'a mut $type) -> Val<'a> {
+                Val::$mut(val)
+            }
+        }
+    };
+}
+
+impl_from!(u32, Integer, RefInteger, MutRefInteger);
+impl_from!(f32, Float, RefFloat, MutRefFloat);
+impl_from!(u64, Long, RefLong, MutRefLong);
+impl_from!(bool, Bool, RefBool, MutRefBool);
+impl_from!(Vector3, Vector3, RefVector3, MutRefVector3);
+
+impl<'a> From<CharPtr<'a>> for Val<'a> {
+    fn from(char_ptr: CharPtr<'a>) -> Self {
+        match char_ptr {
+            CharPtr::Bytes(bytes) => Val::Bytes(bytes),
+            CharPtr::String(str) => Val::String(str),
+        }
+    }
+}
+
+impl<'a> From<RefFunction> for Val<'a> {
+    fn from(ref_func: RefFunction) -> Self {
+        Val::RefFunc(ref_func)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +144,10 @@ where
                 args.push(GuestArg::new(long, false));
             }
 
+            Val::Bool(bool) => {
+                args.push(GuestArg::new(bool, false));
+            }
+
             Val::RefInteger(int) => {
                 args.push(GuestArg::new(int, true));
             }
@@ -110,6 +160,10 @@ where
                 args.push(GuestArg::new(long, true));
             }
 
+            Val::RefBool(bool) => {
+                args.push(GuestArg::new(bool, true));
+            }
+
             Val::MutRefInteger(int) => {
                 args.push(GuestArg::new(int, true));
             }
@@ -120,6 +174,10 @@ where
 
             Val::MutRefLong(long) => {
                 args.push(GuestArg::new(long, true));
+            }
+
+            Val::MutRefBool(bool) => {
+                args.push(GuestArg::new(bool, true));
             }
 
             Val::Vector3(vec) => {

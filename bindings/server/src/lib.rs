@@ -1,6 +1,8 @@
 use fivem_core::invoker::{invoke, Val};
 use serde::Serialize;
 
+pub mod natives;
+
 pub mod events {
     use fivem_core::events::Event;
     use fivem_core::ref_funcs::ExternRefFunction;

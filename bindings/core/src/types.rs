@@ -129,9 +129,31 @@ macro_rules! impl_for_primitives {
     };
 }
 
+pub enum CharPtr<'a> {
+    String(&'a str),
+    Bytes(&'a [u8]),
+}
+
+pub trait AsCharPtr {
+    fn as_char_ptr(&self) -> CharPtr;
+}
+
+impl AsCharPtr for &str {
+    fn as_char_ptr(&self) -> CharPtr {
+        CharPtr::String(self)
+    }
+}
+
+impl AsCharPtr for &[u8] {
+    fn as_char_ptr(&self) -> CharPtr {
+        CharPtr::Bytes(self)
+    }
+}
+
 impl_for_primitives! {
     i8, u8, i16, u16, i32, u32, i64, u64,
-    f32, f64
+    f32, f64,
+    bool
 }
 
 #[repr(C)]
