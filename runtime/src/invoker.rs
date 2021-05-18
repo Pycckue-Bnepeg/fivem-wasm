@@ -121,7 +121,9 @@ fn call_native(
 
     let mut idx = 0;
     for arg in args.iter() {
-        if (idx + arg.size as usize) > (ctx.arguments.len() * std::mem::size_of::<usize>()) {
+        let arg_size = std::cmp::max(std::mem::size_of::<usize>(), arg.size as usize);
+
+        if (idx + arg_size) > (ctx.arguments.len() * std::mem::size_of::<usize>()) {
             return Ok(CallResult::TooMuchArgs);
         }
 
@@ -137,7 +139,7 @@ fn call_native(
             }
         }
 
-        idx += arg.size as usize;
+        idx += arg_size;
     }
 
     if let Some(invoke) = unsafe { INVOKE } {

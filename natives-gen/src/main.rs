@@ -18,6 +18,7 @@ enum ReturnStyle {
     Result,
 }
 
+// TODO: RPC
 fn main() {
     let return_style = ReturnStyle::UnwrapOrDefault;
 
@@ -35,30 +36,9 @@ fn main() {
         ApiSet::Client,
     );
 
-    let gta_universal = natives_from_file(
-        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_universal.lua",
-        &types,
-        ApiSet::Client,
-    );
-
-    let gta_01 = natives_from_file(
-        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_0193D0AF.lua",
-        &types,
-        ApiSet::Client,
-    );
-
-    let gta_21 = natives_from_file(
-        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_21E43A33.lua",
-        &types,
-        ApiSet::Client,
-    );
-
     let natives = natives_cfx
         .iter()
         .chain(&natives_global)
-        .chain(&gta_universal)
-        .chain(&gta_01)
-        .chain(&gta_21)
         .sorted_by_key(|native| &native.name);
 
     let sets = natives.into_group_map_by(|native| native.apiset);

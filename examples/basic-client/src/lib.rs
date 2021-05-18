@@ -18,6 +18,34 @@ struct SpawnInfo {
 #[derive(Serialize)]
 struct SpawnPlayer(SpawnInfo, ExternRefFunction);
 
+const ANIM_DICT: &str = "random@shop_robbery";
+const ANIM_NAME: &str = "robbery_action_f";
+
+async fn play_animation() {
+    use fivem::client::{player::*, streaming::*, task::*};
+    use fivem::runtime::sleep_for;
+
+    request_anim_dict(ANIM_DICT);
+
+    while !has_anim_dict_loaded(ANIM_DICT) {
+        sleep_for(Duration::from_millis(5)).await;
+    }
+
+    let ped = player_ped_id();
+    clear_ped_tasks(ped);
+
+    let mut seq = 0;
+    open_sequence_task(&mut seq);
+
+    task_play_anim(
+        0, ANIM_DICT, ANIM_NAME, 8.0, 1.0, -1, 1, 1.0, false, false, false,
+    );
+
+    close_sequence_task(seq);
+    task_perform_sequence(ped, seq);
+    clear_sequence_task(&mut seq);
+}
+
 #[no_mangle]
 pub extern "C" fn _start() {
     const SPAWN_INFO: SpawnInfo = SpawnInfo {
@@ -27,7 +55,7 @@ pub extern "C" fn _start() {
 
         heading: 0.0,
         idx: 0,
-        model: 0x4A8E5536,
+        model: 0x705E61F2,
         skip_fade: false,
     };
 
@@ -40,6 +68,18 @@ pub extern "C" fn _start() {
     let task = async move {
         let on_spawn = RefFunction::new(|spawn_info: Vec<SpawnInfo>| -> Vec<bool> {
             fivem::log(format!("player spawned: {:?}", spawn_info));
+
+            fivem::client::ped::set_ped_default_component_variation(
+                fivem::client::player::player_ped_id(),
+            );
+
+            let task = async {
+                fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+                play_animation().await;
+            };
+
+            let _ = fivem::runtime::spawn(task);
+
             vec![true]
         });
 

@@ -149,35 +149,35 @@ where
             }
 
             Val::RefInteger(int) => {
-                args.push(GuestArg::new(int, true));
+                args.push(GuestArg::new(*int, true));
             }
 
             Val::RefFloat(float) => {
-                args.push(GuestArg::new(float, true));
+                args.push(GuestArg::new(*float, true));
             }
 
             Val::RefLong(long) => {
-                args.push(GuestArg::new(long, true));
+                args.push(GuestArg::new(*long, true));
             }
 
             Val::RefBool(bool) => {
-                args.push(GuestArg::new(bool, true));
+                args.push(GuestArg::new(*bool, true));
             }
 
             Val::MutRefInteger(int) => {
-                args.push(GuestArg::new(int, true));
+                args.push(GuestArg::new(*int, true));
             }
 
             Val::MutRefFloat(float) => {
-                args.push(GuestArg::new(float, true));
+                args.push(GuestArg::new(*float, true));
             }
 
             Val::MutRefLong(long) => {
-                args.push(GuestArg::new(long, true));
+                args.push(GuestArg::new(*long, true));
             }
 
             Val::MutRefBool(bool) => {
-                args.push(GuestArg::new(bool, true));
+                args.push(GuestArg::new(*bool, true));
             }
 
             Val::Vector3(vec) => {
@@ -185,11 +185,11 @@ where
             }
 
             Val::RefVector3(vec) => {
-                args.push(GuestArg::new(vec, true));
+                args.push(GuestArg::new(*vec, true));
             }
 
             Val::MutRefVector3(vec) => {
-                args.push(GuestArg::new(vec, true));
+                args.push(GuestArg::new(*vec, true));
             }
 
             Val::String(string) => {
