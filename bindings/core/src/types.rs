@@ -44,7 +44,7 @@ impl ReturnValue {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Vector3 {
     pub x: f32,
     pad_0: u32,
@@ -109,6 +109,15 @@ unsafe impl<T: DeserializeOwned> RetVal for Packed<T> {
     unsafe fn convert(bytes: &[u8]) -> Self {
         let inner = rmp_serde::from_read_ref(bytes).unwrap();
         Packed { inner }
+    }
+}
+
+#[cfg(feature = "full")]
+impl<T: Default + DeserializeOwned> Default for Packed<T> {
+    fn default() -> Packed<T> {
+        Packed {
+            inner: T::default(),
+        }
     }
 }
 

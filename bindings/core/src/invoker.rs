@@ -43,19 +43,19 @@ pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
 }
 
 pub enum Val<'a> {
-    RefInteger(&'a u32),
+    RefInteger(&'a i32),
     RefFloat(&'a f32),
-    RefLong(&'a u64),
+    RefLong(&'a i64),
     RefBool(&'a bool),
 
-    MutRefInteger(&'a mut u32),
+    MutRefInteger(&'a mut i32),
     MutRefFloat(&'a mut f32),
-    MutRefLong(&'a mut u64),
+    MutRefLong(&'a mut i64),
     MutRefBool(&'a mut bool),
 
-    Integer(u32),
+    Integer(i32),
     Float(f32),
-    Long(u64),
+    Long(i64),
     Bool(bool),
 
     Vector3(Vector3),
@@ -91,9 +91,9 @@ macro_rules! impl_from {
     };
 }
 
-impl_from!(u32, Integer, RefInteger, MutRefInteger);
+impl_from!(i32, Integer, RefInteger, MutRefInteger);
 impl_from!(f32, Float, RefFloat, MutRefFloat);
-impl_from!(u64, Long, RefLong, MutRefLong);
+impl_from!(i64, Long, RefLong, MutRefLong);
 impl_from!(bool, Bool, RefBool, MutRefBool);
 impl_from!(Vector3, Vector3, RefVector3, MutRefVector3);
 

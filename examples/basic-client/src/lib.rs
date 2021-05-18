@@ -27,7 +27,7 @@ pub extern "C" fn _start() {
 
         heading: 0.0,
         idx: 0,
-        model: 0x5761f4ad, // g_m_m_mexboss_01
+        model: 0x4A8E5536,
         skip_fade: false,
     };
 
@@ -53,14 +53,14 @@ pub extern "C" fn _start() {
         force_respawn.invoke::<(), Vec<u8>>(vec![]);
     };
 
-    let _ = fivem::client::cfx::set_discord_app_id("843983771278901279");
+    fivem::client::cfx::set_discord_app_id("843983771278901279");
 
     let logger = async {
-        let wrapper = || -> Result<(), fivem::invoker::InvokeError> {
-            let player = fivem::client::player::player_ped_id()?;
-            let camera = fivem::client::cam::get_gameplay_cam_coord()?;
-            let player_pos = fivem::client::entity::get_entity_coords(player, false)?;
-            let id = fivem::client::player::player_id()?;
+        let wrapper = || {
+            let player = fivem::client::player::player_ped_id();
+            let camera = fivem::client::cam::get_gameplay_cam_coord();
+            let player_pos = fivem::client::entity::get_entity_coords(player, false);
+            let id = fivem::client::player::player_id();
             let name = fivem::client::player::get_player_name(id)?;
 
             fivem::log(format!(
@@ -68,7 +68,7 @@ pub extern "C" fn _start() {
                 player, camera, player_pos, name, id
             ));
 
-            Ok(())
+            Some(())
         };
 
         loop {

@@ -40,13 +40,12 @@ async fn show_something(event: PlayerConnecting) {
 fn print_my_keys() {
     println!("START FINDING KEYS:");
 
-    if let Ok(handle) = fivem::shared::cfx::start_find_kvp("my:") {
-        while let Ok(key) = fivem::shared::cfx::find_kvp(handle) {
-            println!("found a new key: {:?}", key);
-        }
-
-        let _ = fivem::shared::cfx::end_find_kvp(handle);
+    let handle = fivem::shared::cfx::start_find_kvp("my:");
+    while let Some(key) = fivem::shared::cfx::find_kvp(handle) {
+        println!("found a new key: {:?}", key);
     }
+
+    fivem::shared::cfx::end_find_kvp(handle);
 
     println!("DONE FINDING KEYS");
 }

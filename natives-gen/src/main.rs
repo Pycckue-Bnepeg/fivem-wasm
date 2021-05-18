@@ -7,7 +7,20 @@ use full_moon::ast::{
     Call, Expression, Field, FunctionArgs, FunctionCall, Prefix, Stmt, Suffix, Value,
 };
 
+#[derive(Debug, Clone, Copy)]
+enum ReturnStyle {
+    /// Full unwrap
+    Unwrap,
+    /// Uses .unwrap_or_default on primitives, strings are option.
+    /// If no return just ignores
+    UnwrapOrDefault,
+    Option,
+    Result,
+}
+
 fn main() {
+    let return_style = ReturnStyle::UnwrapOrDefault;
+
     let types = types_from_file("E:/sources/c/fivem-fork/ext/natives/codegen_types.lua");
 
     let natives_cfx = natives_from_file(
@@ -51,7 +64,7 @@ fn main() {
     let sets = natives.into_group_map_by(|native| native.apiset);
 
     for (apiset, natives) in sets {
-        make_natives_for_set(apiset, natives);
+        make_natives_for_set(apiset, natives, return_style);
     }
 }
 
@@ -145,6 +158,7 @@ struct CfxType {
 struct RustType {
     name: String,
     convert: Option<String>,
+    may_be_default: bool,
 }
 
 #[derive(Debug)]
@@ -250,33 +264,39 @@ fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
                 RustType {
                     name: "String".to_owned(),
                     convert: None,
+                    may_be_default: false,
                 }
             } else {
                 RustType {
                     name: "impl fivem_core::types::AsCharPtr".to_owned(),
                     convert: Some("as_char_ptr().into()".to_owned()),
+                    may_be_default: false,
                 }
             }
         }
 
         "int" => RustType {
-            name: "u32".to_owned(),
+            name: "i32".to_owned(),
             convert: None,
+            may_be_default: true,
         },
 
         "long" => RustType {
-            name: "u64".to_owned(),
+            name: "i64".to_owned(),
             convert: None,
+            may_be_default: true,
         },
 
         "float" => RustType {
             name: "f32".to_owned(),
             convert: None,
+            may_be_default: true,
         },
 
         "vector3" => RustType {
             name: "fivem_core::types::Vector3".to_owned(),
             convert: None,
+            may_be_default: true,
         },
 
         "func" => {
@@ -284,11 +304,13 @@ fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
                 RustType {
                     name: "fivem_core::ref_funcs::ExternRefFunction".to_owned(),
                     convert: None,
+                    may_be_default: false,
                 }
             } else {
                 RustType {
                     name: "fivem_core::ref_funcs::RefFunction".to_owned(),
                     convert: None,
+                    may_be_default: false,
                 }
             }
         }
@@ -298,11 +320,13 @@ fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
                 RustType {
                     name: "fivem_core::types::Packed<Ret>".to_owned(),
                     convert: None,
+                    may_be_default: false,
                 }
             } else {
                 RustType {
                     name: "impl serde::Serialize".to_owned(),
                     convert: None,
+                    may_be_default: false,
                 }
             }
         }
@@ -310,11 +334,13 @@ fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
         "bool" => RustType {
             name: "bool".to_owned(),
             convert: None,
+            may_be_default: true,
         },
 
         _ => RustType {
             name: "()".to_owned(),
             convert: None,
+            may_be_default: true,
         },
     }
 }
@@ -459,7 +485,7 @@ fn format_natives(
     natives
 }
 
-fn make_native(native: &Native) -> String {
+fn make_native(native: &Native, return_style: ReturnStyle) -> String {
     let name = {
         let generics = if let Some(ret) = &native.returns {
             if ret.name.ends_with("<Ret>") {
@@ -512,19 +538,60 @@ fn make_native(native: &Native) -> String {
             .collect::<Vec<String>>()
             .join(", ");
 
+        let (prefix, turbofish) = if let ReturnStyle::UnwrapOrDefault = return_style {
+            if native.returns.is_none() {
+                ("let _ = ", "::<(), _>")
+            } else {
+                ("", "")
+            }
+        } else {
+            ("", "")
+        };
+
+        let suffix = match return_style {
+            ReturnStyle::Option => ".ok()",
+            ReturnStyle::Result => "",
+            ReturnStyle::Unwrap => ".unwrap()",
+            ReturnStyle::UnwrapOrDefault => {
+                if let Some(ret) = native.returns.as_ref() {
+                    if ret.may_be_default {
+                        ".unwrap_or_default()"
+                    } else {
+                        ".ok()"
+                    }
+                } else {
+                    ";"
+                }
+            }
+        };
+
         format!(
-            "fivem_core::invoker::invoke(0x{:X?}, &[{}])",
-            native.hash, args
+            "{}fivem_core::invoker::invoke{}(0x{:X?}, &[{}]){}",
+            prefix, turbofish, native.hash, args, suffix,
         )
     };
 
-    format!(
-        "pub fn {}({}) -> Result<{}, fivem_core::invoker::InvokeError> {{ {} }}",
-        name, args, rettype, body
-    )
+    let ret = match return_style {
+        ReturnStyle::Option => format!("Option<{}>", rettype),
+        ReturnStyle::Unwrap => format!("{}", rettype),
+        ReturnStyle::Result => format!("Result<{}, fivem_core::invoker::InvokeError>", rettype),
+        ReturnStyle::UnwrapOrDefault => {
+            if let Some(ret) = native.returns.as_ref() {
+                if ret.may_be_default {
+                    format!("{}", rettype)
+                } else {
+                    format!("Option<{}>", rettype)
+                }
+            } else {
+                "()".to_owned()
+            }
+        }
+    };
+
+    format!("pub fn {}({}) -> {} {{ {} }}", name, args, ret, body)
 }
 
-fn make_natives_for_set(apiset: ApiSet, natives: Vec<&Native>) {
+fn make_natives_for_set(apiset: ApiSet, natives: Vec<&Native>, return_style: ReturnStyle) {
     let mut file =
         std::fs::File::create(format!("bindings/{}/src/natives.rs", apiset.to_string())).unwrap();
     let namespaces = natives
@@ -537,7 +604,7 @@ fn make_natives_for_set(apiset: ApiSet, natives: Vec<&Native>) {
         }
 
         for native in natives.iter().dedup_by(|f, s| f.name == s.name) {
-            let _ = writeln!(file, "{}", make_native(native));
+            let _ = writeln!(file, "{}", make_native(native, return_style));
         }
 
         if namespace.len() > 0 {
