@@ -91,7 +91,7 @@ pub fn call_native_wrapper(
     } else {
         Some(unsafe {
             let ptr = mem.data_ptr().add(retval as _) as *const ReturnValue;
-            (*ptr).clone()
+            (&*ptr).clone()
         })
     };
 
@@ -146,7 +146,12 @@ fn call_native(
         }
     }
 
-    if ctx.num_results == 0 || retval.is_none() {
+    let rettype = retval
+        .as_ref()
+        .map(|retval| retval.rettype)
+        .unwrap_or(ReturnType::Empty);
+
+    if ctx.num_results == 0 && (retval.is_none() || rettype == ReturnType::Empty) {
         return Ok(CallResult::Ok);
     }
 
@@ -196,6 +201,10 @@ fn call_native(
                 let cstr = unsafe { CStr::from_ptr(ctx.arguments[0] as *const _) };
                 let bytes = cstr.to_bytes();
                 let len = bytes.len();
+
+                if len == 0 {
+                    return Ok(CallResult::Ok);
+                }
 
                 if retval.capacity < len as _ {
                     if let Some(new_buffer) = resize_buffer(len) {

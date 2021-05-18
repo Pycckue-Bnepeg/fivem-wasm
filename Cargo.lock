@@ -562,6 +562,7 @@ dependencies = [
  "fivem-client",
  "fivem-core",
  "fivem-server",
+ "fivem-shared",
 ]
 
 [[package]]
@@ -586,6 +587,16 @@ dependencies = [
 
 [[package]]
 name = "fivem-server"
+version = "0.1.0"
+dependencies = [
+ "fivem-core",
+ "futures",
+ "rmp-serde",
+ "serde",
+]
+
+[[package]]
+name = "fivem-shared"
 version = "0.1.0"
 dependencies = [
  "fivem-core",
@@ -925,7 +936,9 @@ checksum = "0debeb9fcf88823ea64d64e4a815ab1643f33127d995978e099942ce38f25238"
 name = "natives-gen"
 version = "0.1.0"
 dependencies = [
+ "convert_case",
  "full_moon",
+ "itertools",
  "joaat",
 ]
 

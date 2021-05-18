@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="CPP_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/bindings/client/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bindings/core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bindings/server/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bindings/shared/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bindings/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples/basic-client/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples/basic-server/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/glue/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/natives-gen/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/runtime/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/standalone/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

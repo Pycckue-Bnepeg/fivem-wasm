@@ -1,4 +1,5 @@
 target/
 *.h
 utils/components.json
-bindings/server/src/natives.rs
+bindings/*/src/natives.rs
+

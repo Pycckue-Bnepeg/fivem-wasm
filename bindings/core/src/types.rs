@@ -2,7 +2,7 @@
 use serde::de::DeserializeOwned;
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ReturnType {
     Empty = 0,
     Number,
@@ -44,6 +44,7 @@ impl ReturnValue {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone)]
 pub struct Vector3 {
     pub x: f32,
     pad_0: u32,

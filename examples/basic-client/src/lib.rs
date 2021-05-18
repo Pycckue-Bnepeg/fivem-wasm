@@ -1,5 +1,6 @@
 use fivem::ref_funcs::{ExternRefFunction, RefFunction};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SpawnInfo {
@@ -52,5 +53,30 @@ pub extern "C" fn _start() {
         force_respawn.invoke::<(), Vec<u8>>(vec![]);
     };
 
+    let _ = fivem::client::cfx::set_discord_app_id("843983771278901279");
+
+    let logger = async {
+        let wrapper = || -> Result<(), fivem::invoker::InvokeError> {
+            let player = fivem::client::player::player_ped_id()?;
+            let camera = fivem::client::cam::get_gameplay_cam_coord()?;
+            let player_pos = fivem::client::entity::get_entity_coords(player, false)?;
+            let id = fivem::client::player::player_id()?;
+            let name = fivem::client::player::get_player_name(id)?;
+
+            fivem::log(format!(
+                "player {} camera: {:?} player: {:?} name: {:?} id: {}",
+                player, camera, player_pos, name, id
+            ));
+
+            Ok(())
+        };
+
+        loop {
+            wrapper();
+            fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+        }
+    };
+
+    let _ = fivem::runtime::spawn(logger);
     let _ = fivem::runtime::spawn(task);
 }

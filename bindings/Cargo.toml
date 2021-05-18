@@ -13,3 +13,4 @@ client = ["fivem-client"]
 fivem-core = { path = "core/" }
 fivem-client = { path = "client/", optional = true }
 fivem-server = { path = "server/", optional = true }
+fivem-shared = { path = "shared/" }

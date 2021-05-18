@@ -1,3 +1,5 @@
+use convert_case::{Case, Casing};
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::io::*;
 
@@ -5,23 +7,57 @@ use full_moon::ast::{
     Call, Expression, Field, FunctionArgs, FunctionCall, Prefix, Stmt, Suffix, Value,
 };
 
-// TODO: client / server / shared
-//       group by namespaces
 fn main() {
-    let params =
-        std::fs::read_to_string("E:/sources/c/fivem-fork/ext/natives/inp/natives_cfx.lua").unwrap();
+    let types = types_from_file("E:/sources/c/fivem-fork/ext/natives/codegen_types.lua");
 
-    let types =
-        std::fs::read_to_string("E:/sources/c/fivem-fork/ext/natives/codegen_types.lua").unwrap();
+    let natives_cfx = natives_from_file(
+        "E:/sources/c/fivem-fork/ext/natives/inp/natives_cfx.lua",
+        &types,
+        ApiSet::Server,
+    );
 
-    let ast_params = full_moon::parse(&params).unwrap();
+    let natives_global = natives_from_file(
+        "E:/sources/c/fivem-fork/ext/natives/inp/natives_global.lua",
+        &types,
+        ApiSet::Client,
+    );
+
+    let gta_universal = natives_from_file(
+        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_universal.lua",
+        &types,
+        ApiSet::Client,
+    );
+
+    let gta_01 = natives_from_file(
+        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_0193D0AF.lua",
+        &types,
+        ApiSet::Client,
+    );
+
+    let gta_21 = natives_from_file(
+        "E:/sources/c/fivem-fork/ext/natives/natives_stash/gta_21E43A33.lua",
+        &types,
+        ApiSet::Client,
+    );
+
+    let natives = natives_cfx
+        .iter()
+        .chain(&natives_global)
+        .chain(&gta_universal)
+        .chain(&gta_01)
+        .chain(&gta_21)
+        .sorted_by_key(|native| &native.name);
+
+    let sets = natives.into_group_map_by(|native| native.apiset);
+
+    for (apiset, natives) in sets {
+        make_natives_for_set(apiset, natives);
+    }
+}
+
+fn types_from_file(file: &str) -> HashMap<String, CfxType> {
+    let types = std::fs::read_to_string(file).unwrap();
     let ast_types = full_moon::parse(&types).unwrap();
-
-    let params: Vec<NativeParam> = ast_params
-        .nodes()
-        .stmts()
-        .filter_map(|stmt| unwrap(stmt))
-        .collect();
 
     let types: Vec<NativeParam> = ast_types
         .nodes()
@@ -29,17 +65,27 @@ fn main() {
         .filter_map(|stmt| unwrap(stmt))
         .collect();
 
-    let types = format_types(types);
-    let natives = format_natives(params, types);
-
-    let mut file = std::fs::File::create("natives.rs").unwrap();
-
-    for native in natives.iter() {
-        writeln!(file, "{}", make_native(native));
-    }
+    format_types(types)
 }
 
-#[derive(Debug)]
+fn natives_from_file(
+    file: &str,
+    types: &HashMap<String, CfxType>,
+    default_set: ApiSet,
+) -> Vec<Native> {
+    let params = std::fs::read_to_string(file).unwrap();
+    let ast_params = full_moon::parse(&params).unwrap();
+
+    let params: Vec<NativeParam> = ast_params
+        .nodes()
+        .stmts()
+        .filter_map(|stmt| unwrap(stmt))
+        .collect();
+
+    format_natives(params, types, default_set)
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 enum ApiSet {
     Server,
     Client,
@@ -56,6 +102,16 @@ impl From<String> for ApiSet {
     }
 }
 
+impl ToString for ApiSet {
+    fn to_string(&self) -> String {
+        match self {
+            ApiSet::Client => "client".to_owned(),
+            ApiSet::Server => "server".to_owned(),
+            ApiSet::Shared => "shared".to_owned(),
+        }
+    }
+}
+
 impl Default for ApiSet {
     fn default() -> Self {
         ApiSet::Server
@@ -65,7 +121,7 @@ impl Default for ApiSet {
 #[derive(Debug, Default)]
 struct Native {
     name: String,
-    jhash: u64,
+    hash: u64,
     apiset: ApiSet,
     namespace: Option<String>,
     game: Option<String>,
@@ -285,7 +341,6 @@ fn format_types(types: Vec<NativeParam>) -> HashMap<String, CfxType> {
                 }
 
                 if let Argument::String(str) = &ty.argument {
-                    println!("{}", str);
                     cfx_type = Some(CfxType {
                         name: str.to_owned(),
                         ..Default::default()
@@ -322,7 +377,11 @@ fn format_types(types: Vec<NativeParam>) -> HashMap<String, CfxType> {
     formated
 }
 
-fn format_natives(params: Vec<NativeParam>, types: HashMap<String, CfxType>) -> Vec<Native> {
+fn format_natives(
+    params: Vec<NativeParam>,
+    types: &HashMap<String, CfxType>,
+    default_set: ApiSet,
+) -> Vec<Native> {
     let mut params = params.iter();
     let mut native: Option<Native> = None;
     let mut natives = vec![];
@@ -331,8 +390,8 @@ fn format_natives(params: Vec<NativeParam>, types: HashMap<String, CfxType>) -> 
         if let Some(param) = params.next() {
             if param.name == "native" {
                 if let Some(mut native) = native.take() {
-                    if native.jhash == 0 {
-                        native.jhash = joaat::hash_ascii_lowercase(
+                    if native.hash == 0 {
+                        native.hash = joaat::hash_ascii_lowercase(
                             native.name.to_ascii_lowercase().as_bytes(),
                         ) as u64;
                     }
@@ -343,6 +402,7 @@ fn format_natives(params: Vec<NativeParam>, types: HashMap<String, CfxType>) -> 
                 if let Argument::String(str) = &param.argument {
                     native = Some(Native {
                         name: str.to_owned(),
+                        apiset: default_set,
                         ..Default::default()
                     });
                 }
@@ -354,6 +414,12 @@ fn format_natives(params: Vec<NativeParam>, types: HashMap<String, CfxType>) -> 
 
                     match param.name.as_str() {
                         "jhash" => (),
+                        "hash" => {
+                            native.hash = arg
+                                .strip_prefix("0x")
+                                .and_then(|arg| u64::from_str_radix(&arg, 16).ok())
+                                .unwrap_or(0)
+                        }
                         "apiset" => native.apiset = ApiSet::from(arg),
                         "ns" => native.namespace = Some(arg),
                         "game" => native.game = Some(arg),
@@ -371,7 +437,7 @@ fn format_natives(params: Vec<NativeParam>, types: HashMap<String, CfxType>) -> 
                                         let ty = convert_type(ty, false);
 
                                         Some(RustArgument {
-                                            name: name.get(0)?.to_string(),
+                                            name: name.get(0)?.to_string().to_case(Case::Snake),
                                             is_ptr,
                                             ty,
                                         })
@@ -405,7 +471,11 @@ fn make_native(native: &Native) -> String {
             ""
         };
 
-        format!("{}{}", native.name.to_ascii_lowercase(), generics)
+        if native.name.starts_with("0x") {
+            format!("_{}{}", native.name.to_ascii_lowercase(), generics)
+        } else {
+            format!("{}{}", native.name.to_ascii_lowercase(), generics)
+        }
     };
 
     let rettype = native
@@ -442,11 +512,36 @@ fn make_native(native: &Native) -> String {
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!("fivem_core::invoker::invoke({}, &[{}])", native.jhash, args)
+        format!(
+            "fivem_core::invoker::invoke(0x{:X?}, &[{}])",
+            native.hash, args
+        )
     };
 
     format!(
         "pub fn {}({}) -> Result<{}, fivem_core::invoker::InvokeError> {{ {} }}",
         name, args, rettype, body
     )
+}
+
+fn make_natives_for_set(apiset: ApiSet, natives: Vec<&Native>) {
+    let mut file =
+        std::fs::File::create(format!("bindings/{}/src/natives.rs", apiset.to_string())).unwrap();
+    let namespaces = natives
+        .iter()
+        .into_group_map_by(|native| native.namespace.clone().unwrap_or_else(|| String::new()));
+
+    for (namespace, natives) in namespaces {
+        if namespace.len() > 0 {
+            let _ = writeln!(file, "pub mod {} {{", namespace.to_ascii_lowercase());
+        }
+
+        for native in natives.iter().dedup_by(|f, s| f.name == s.name) {
+            let _ = writeln!(file, "{}", make_native(native));
+        }
+
+        if namespace.len() > 0 {
+            let _ = writeln!(file, "}}");
+        }
+    }
 }

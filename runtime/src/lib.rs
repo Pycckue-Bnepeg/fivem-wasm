@@ -371,7 +371,7 @@ fn canonicalize_ref(caller: Caller, ref_idx: i32, ptr: i32, len: i32) -> Option<
     None
 }
 
-fn script_log<T: AsRef<str>>(msg: T) {
+pub(crate) fn script_log<T: AsRef<str>>(msg: T) {
     if let Some(log) = unsafe { LOGGER } {
         let cstr = std::ffi::CString::new(msg.as_ref()).unwrap();
         log(cstr.as_ptr());

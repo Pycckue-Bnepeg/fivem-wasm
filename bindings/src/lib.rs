@@ -1,11 +1,17 @@
 #[cfg(feature = "server")]
 pub mod server {
+    pub use fivem_server::natives::*;
     pub use fivem_server::*;
 }
 
 #[cfg(feature = "client")]
 pub mod client {
+    pub use fivem_client::natives::*;
     pub use fivem_client::*;
+}
+
+pub mod shared {
+    pub use fivem_shared::natives::*;
 }
 
 pub mod events {
