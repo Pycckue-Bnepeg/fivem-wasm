@@ -13,12 +13,27 @@ enum ReturnStyle {
     Unwrap,
     /// Uses .unwrap_or_default on primitives, strings are option.
     /// If no return just ignores
+    /// ```rust,ignore
+    /// fn native_primitive(args...) -> i32 {
+    ///     invoke(hash, args...).unwrap_or_default()
+    /// }
+    ///
+    /// fn native_str(args...) -> Option<String> {
+    ///     invoke(hash, args...).ok()
+    /// }
+    ///
+    /// fn native_no_return_or_void(args...) -> () {
+    ///     let _ = invoke::<(), _>(hash, args...);
+    /// }
+    /// ```
     UnwrapOrDefault,
+    /// `fn native(args...) -> Option<T>`
     Option,
+    /// `fn native(args...) -> Result<T, InvokeError>`
     Result,
 }
 
-// TODO: RPC
+// TODO: RPC; move shared into client and server
 fn main() {
     let return_style = ReturnStyle::UnwrapOrDefault;
 

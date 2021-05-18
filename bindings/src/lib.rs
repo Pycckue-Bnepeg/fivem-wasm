@@ -1,13 +1,13 @@
 #[cfg(feature = "server")]
 pub mod server {
     pub use fivem_server::natives::*;
-    pub use fivem_server::{events, emit_net};
+    pub use fivem_server::{emit_net, events};
 }
 
 #[cfg(feature = "client")]
 pub mod client {
     pub use fivem_client::natives::*;
-    pub use fivem_client::{emit_net, events};
+    pub use fivem_client::{emit_net, events, TaskSequenceBuilder};
 }
 
 pub mod shared {

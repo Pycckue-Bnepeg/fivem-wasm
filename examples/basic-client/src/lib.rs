@@ -22,28 +22,14 @@ const ANIM_DICT: &str = "random@shop_robbery";
 const ANIM_NAME: &str = "robbery_action_f";
 
 async fn play_animation() {
-    use fivem::client::{player::*, streaming::*, task::*};
-    use fivem::runtime::sleep_for;
+    use fivem::client::TaskSequenceBuilder;
 
-    request_anim_dict(ANIM_DICT);
-
-    while !has_anim_dict_loaded(ANIM_DICT) {
-        sleep_for(Duration::from_millis(5)).await;
-    }
-
-    let ped = player_ped_id();
-    clear_ped_tasks(ped);
-
-    let mut seq = 0;
-    open_sequence_task(&mut seq);
-
-    task_play_anim(
-        0, ANIM_DICT, ANIM_NAME, 8.0, 1.0, -1, 1, 1.0, false, false, false,
-    );
-
-    close_sequence_task(seq);
-    task_perform_sequence(ped, seq);
-    clear_sequence_task(&mut seq);
+    TaskSequenceBuilder::new()
+        .play_anim(
+            ANIM_DICT, ANIM_NAME, 8.0, 1.0, -1, 1, 1.0, false, false, false,
+        )
+        .await
+        .run(true);
 }
 
 #[no_mangle]
