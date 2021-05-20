@@ -79,10 +79,14 @@ pub fn make_export(export: &str, func: RefFunction) {
     let resource = crate::invoker::current_resource_name().unwrap();
     let export = export_name(&resource, export);
 
-    crate::events::set_event_handler(&export, move |event: Event<GetExport>| {
-        let ext_func = event.payload().func.clone();
-        ext_func.invoke::<(), _>(vec![func.as_extern_ref_func()]);
-    });
+    crate::events::set_event_handler(
+        &export,
+        move |event: Event<GetExport>| {
+            let ext_func = event.payload().func.clone();
+            ext_func.invoke::<(), _>(vec![func.as_extern_ref_func()]);
+        },
+        crate::events::EventScope::Local,
+    );
 }
 
 fn export_name(resource: &str, export: &str) -> String {

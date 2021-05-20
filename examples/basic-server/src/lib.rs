@@ -1,4 +1,4 @@
-use fivem::{ref_funcs::RefFunction, server::events::PlayerConnecting};
+use fivem::{events::EventScope, ref_funcs::RefFunction, server::events::PlayerConnecting};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
@@ -7,11 +7,43 @@ async fn handle_connections() {
 
     while let Some(event) = events.next().await {
         fivem::log(format!(
-            "A new player connected: {}",
-            event.payload().player_name
+            "A new player connected: {}. Event source: {:?}",
+            event.payload().player_name,
+            event.source(),
         ));
 
         let _ = fivem::runtime::spawn(show_something(event.into_inner()));
+    }
+}
+
+async fn handle_custom_event() {
+    #[derive(Debug, Deserialize)]
+    struct Ping {
+        req: String,
+    }
+
+    #[derive(Serialize)]
+    struct Pong((String, u64));
+
+    let mut counter = 0;
+    let mut events = fivem::events::subscribe::<Ping>("client_ping", EventScope::Network);
+
+    while let Some(event) = events.next().await {
+        let ping = event.payload();
+
+        fivem::log(format!(
+            "got a ping from {:?} with message: {:?}",
+            event.source(),
+            ping.req
+        ));
+
+        fivem::events::emit_to_client(
+            "server_pong",
+            event.source(),
+            Pong((ping.req.to_owned(), counter)),
+        );
+
+        counter += 1;
     }
 }
 
@@ -120,5 +152,7 @@ pub extern "C" fn _start() {
     let task = test_exports();
     let _ = fivem::runtime::spawn(task);
     let task = handle_connections();
+    let _ = fivem::runtime::spawn(task);
+    let task = handle_custom_event();
     let _ = fivem::runtime::spawn(task);
 }

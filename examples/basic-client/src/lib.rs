@@ -1,4 +1,6 @@
+use fivem::events::EventScope;
 use fivem::ref_funcs::{ExternRefFunction, RefFunction};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -30,6 +32,51 @@ async fn play_animation() {
         )
         .await
         .run(true);
+}
+
+async fn listen_to_pongs() {
+    #[derive(Debug, Deserialize)]
+    struct Pong {
+        msg: String,
+        counter: u64,
+    }
+
+    let mut events = fivem::events::subscribe::<Pong>("server_pong", EventScope::Network);
+
+    while let Some(event) = events.next().await {
+        let pong = event.payload();
+
+        fivem::log(format!(
+            "got a pong from {:?} with message: {:?}",
+            event.source(),
+            pong
+        ));
+    }
+}
+
+fn set_command_handler() {
+    #[derive(Serialize)]
+    struct Ping {
+        req: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Command {
+        _source: u32,
+        _arguments: Vec<()>,
+        _raw_cmd: String,
+    }
+
+    let handler = RefFunction::new(|_: Command| {
+        fivem::events::emit_to_server(
+            "client_ping",
+            Ping {
+                req: "pong me please".to_owned(),
+            },
+        );
+    });
+
+    fivem::client::cfx::register_command("wasm_ping", handler, false);
 }
 
 #[no_mangle]
@@ -110,4 +157,8 @@ pub extern "C" fn _start() {
 
     let _ = fivem::runtime::spawn(logger);
     let _ = fivem::runtime::spawn(task);
+
+    // commands
+    set_command_handler();
+    let _ = fivem::runtime::spawn(listen_to_pongs());
 }

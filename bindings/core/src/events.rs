@@ -19,6 +19,11 @@ pub struct RawEvent {
     pub payload: Vec<u8>,
 }
 
+struct EventSub {
+    scope: EventScope,
+    handler: EventHandler,
+}
+
 enum EventHandler {
     Future(UnboundedSender<RawEvent>),
     Function(Box<dyn FnMut(RawEvent) + 'static>),
@@ -27,7 +32,7 @@ enum EventHandler {
 // TODO: Vec<UnboundedSender<Event>>
 thread_local! {
     // static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
-    static EVENTS: RefCell<HashMap<String, EventHandler>> = RefCell::new(HashMap::new());
+    static EVENTS: RefCell<HashMap<String, EventSub>> = RefCell::new(HashMap::new());
 }
 
 #[doc(hidden)]
@@ -42,7 +47,7 @@ pub unsafe extern "C" fn __cfx_on_event(
     let payload = Vec::from(std::slice::from_raw_parts(args, args_length as _));
     let source = CStr::from_ptr(source).to_str().unwrap().to_owned();
 
-    let event = RawEvent {
+    let mut event = RawEvent {
         name,
         payload,
         source,
@@ -51,12 +56,28 @@ pub unsafe extern "C" fn __cfx_on_event(
     EVENTS.with(|events| {
         let mut events = events.borrow_mut();
 
-        if let Some(handler) = events.get_mut(&event.name) {
-            match handler {
-                EventHandler::Function(func) => {
+        if let Some(sub) = events.get_mut(&event.name) {
+            if event.source.starts_with("net:") {
+                if sub.scope != EventScope::Network {
+                    return;
+                }
+
+                event.source = event.source.strip_prefix("net:").unwrap().to_owned();
+            } else if
+            /* is_duplicity_version && */
+            event.source.starts_with("internal-net:") {
+                event.source = event
+                    .source
+                    .strip_prefix("internal-net:")
+                    .unwrap()
+                    .to_owned();
+            }
+
+            match sub.handler {
+                EventHandler::Function(ref mut func) => {
                     func(event);
                 }
-                EventHandler::Future(sender) => {
+                EventHandler::Future(ref sender) => {
                     let _ = sender.unbounded_send(event);
                 }
             }
@@ -94,6 +115,12 @@ impl<T: DeserializeOwned> Event<T> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventScope {
+    Local,
+    Network,
+}
+
 /// Subscribes on an event with the given name.
 ///
 /// Every time that an event is triggered this function decodes a raw message using messagepack.
@@ -118,8 +145,11 @@ impl<T: DeserializeOwned> Event<T> {
 /// # Ok(())
 /// # }
 ///
-pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Event<T>> {
-    subscribe_raw(event_name)
+pub fn subscribe<T: DeserializeOwned>(
+    event_name: &str,
+    scope: EventScope,
+) -> impl Stream<Item = Event<T>> {
+    subscribe_raw(event_name, scope)
         .filter_map(|event| async move {
             rmp_serde::from_read(event.payload.as_slice())
                 .ok()
@@ -129,20 +159,26 @@ pub fn subscribe<T: DeserializeOwned>(event_name: &str) -> impl Stream<Item = Ev
             source: event.source,
             payload,
         })
+        .boxed_local()
 }
 
 /// Same as [`subscribe`] but returns [`RawEvent`].
-pub fn subscribe_raw(event_name: &str) -> impl Stream<Item = RawEvent> {
+pub fn subscribe_raw(event_name: &str, scope: EventScope) -> impl Stream<Item = RawEvent> {
     let (tx, rx) = unbounded();
 
     EVENTS.with(|events| {
+        let sub = EventSub {
+            scope,
+            handler: EventHandler::Future(tx),
+        };
+
         let mut events = events.borrow_mut();
-        events.insert(event_name.to_owned(), EventHandler::Future(tx));
+        events.insert(event_name.to_owned(), sub);
     });
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
 
-    rx
+    rx.boxed_local()
 }
 
 /// Sets an event handler.
@@ -152,7 +188,7 @@ pub fn subscribe_raw(event_name: &str) -> impl Stream<Item = RawEvent> {
 ///
 /// It is useful for events that contains [`crate::ref_funcs::ExternRefFunction`] to call it.
 /// Internaly this function is used in [`crate::exports::make_export`].
-pub fn set_event_handler<In, Handler>(event_name: &str, mut handler: Handler)
+pub fn set_event_handler<In, Handler>(event_name: &str, mut handler: Handler, scope: EventScope)
 where
     Handler: FnMut(Event<In>) + 'static,
     In: DeserializeOwned,
@@ -173,11 +209,13 @@ where
     };
 
     EVENTS.with(|events| {
+        let sub = EventSub {
+            scope,
+            handler: EventHandler::Function(Box::new(raw_handler)),
+        };
+
         let mut events = events.borrow_mut();
-        events.insert(
-            event_name.to_owned(),
-            EventHandler::Function(Box::new(raw_handler)),
-        );
+        events.insert(event_name.to_owned(), sub);
     });
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
