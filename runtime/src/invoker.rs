@@ -65,6 +65,7 @@ impl Into<i32> for CallResult {
     }
 }
 
+#[inline]
 pub fn call_native_wrapper(
     caller: Caller,
     hash: u64,
@@ -104,6 +105,7 @@ pub fn call_native_wrapper(
     Ok(call_result)
 }
 
+#[inline]
 fn call_native(
     hash: u64,
     args: &[GuestArg],
@@ -148,16 +150,11 @@ fn call_native(
         }
     }
 
-    let rettype = retval
-        .as_ref()
-        .map(|retval| retval.rettype)
-        .unwrap_or(ReturnType::Empty);
-
-    if ctx.num_results == 0 && (retval.is_none() || rettype == ReturnType::Empty) {
-        return Ok(CallResult::Ok);
-    }
-
     if let Some(retval) = retval {
+        if ctx.num_results == 0 && retval.rettype == ReturnType::Empty {
+            return Ok(CallResult::Ok);
+        }
+
         let resize_buffer = |new_size: usize| -> Option<*mut u8> {
             if let Some(resizer) = resize_func.as_ref() {
                 let ptr = resizer.call(&[Val::I32(new_size as _)]).ok()?;
@@ -175,9 +172,8 @@ fn call_native(
         };
 
         let mut buffer = unsafe { memory.data_ptr().add(retval.buffer as _) };
-        let rettype = ReturnType::from(retval.rettype as u32);
 
-        match rettype {
+        match retval.rettype {
             ReturnType::Empty => return Ok(CallResult::Ok),
             ReturnType::Number => {
                 if retval.capacity < 8 {
@@ -268,11 +264,14 @@ fn call_native(
 
             ReturnType::Unk => CallResult::NoReturn,
         };
+    } else if ctx.num_results == 0 {
+        return Ok(CallResult::Ok);
     }
 
     Ok(CallResult::NoReturn)
 }
 
+#[inline]
 pub fn invoke_ref_func_wrapper(
     caller: Caller,
     ref_name: i32,

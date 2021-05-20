@@ -62,6 +62,11 @@ pub extern "C" fn _start() {
             let task = async {
                 fivem::runtime::sleep_for(Duration::from_secs(5)).await;
                 play_animation().await;
+                fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+
+                let time = std::time::Instant::now();
+                play_animation().await;
+                fivem::log(format!("play_animation() {:?}", time.elapsed()));
             };
 
             let _ = fivem::runtime::spawn(task);

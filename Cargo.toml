@@ -8,7 +8,6 @@ members = [
     "bindings/core",
     "bindings/client",
     "bindings/server",
-    "bindings/shared",
 
     # test
     "standalone",

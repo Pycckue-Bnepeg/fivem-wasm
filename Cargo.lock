@@ -562,7 +562,6 @@ dependencies = [
  "fivem-client",
  "fivem-core",
  "fivem-server",
- "fivem-shared",
 ]
 
 [[package]]
@@ -587,16 +586,6 @@ dependencies = [
 
 [[package]]
 name = "fivem-server"
-version = "0.1.0"
-dependencies = [
- "fivem-core",
- "futures",
- "rmp-serde",
- "serde",
-]
-
-[[package]]
-name = "fivem-shared"
 version = "0.1.0"
 dependencies = [
  "fivem-core",

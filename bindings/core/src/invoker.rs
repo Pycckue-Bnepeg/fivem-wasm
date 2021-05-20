@@ -72,18 +72,21 @@ pub enum Val<'a> {
 macro_rules! impl_from {
     ($type:ty, $val:ident, $ref:ident, $mut:ident) => {
         impl<'a> From<$type> for Val<'a> {
+            #[inline]
             fn from(val: $type) -> Val<'a> {
                 Val::$val(val)
             }
         }
 
         impl<'a> From<&'a $type> for Val<'a> {
+            #[inline]
             fn from(val: &'a $type) -> Val<'a> {
                 Val::$ref(val)
             }
         }
 
         impl<'a> From<&'a mut $type> for Val<'a> {
+            #[inline]
             fn from(val: &'a mut $type) -> Val<'a> {
                 Val::$mut(val)
             }
@@ -98,6 +101,7 @@ impl_from!(bool, Bool, RefBool, MutRefBool);
 impl_from!(Vector3, Vector3, RefVector3, MutRefVector3);
 
 impl<'a> From<CharPtr<'a>> for Val<'a> {
+    #[inline]
     fn from(char_ptr: CharPtr<'a>) -> Self {
         match char_ptr {
             CharPtr::Bytes(bytes) => Val::Bytes(bytes),
@@ -107,6 +111,7 @@ impl<'a> From<CharPtr<'a>> for Val<'a> {
 }
 
 impl<'a> From<RefFunction> for Val<'a> {
+    #[inline]
     fn from(ref_func: RefFunction) -> Self {
         Val::RefFunc(ref_func)
     }
@@ -119,78 +124,31 @@ pub enum InvokeError {
     Code(i32),
 }
 
-// TODO Iterator::map
 pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Result<Ret, InvokeError>
 where
     Ret: RetVal,
     Args: IntoIterator<Item = &'a Val<'a>>,
 {
     let iter = arguments.into_iter();
-
-    let mut args: Vec<GuestArg> = Vec::new();
     let mut strings = Vec::new(); // cleanup memory after a call
 
-    for arg in iter {
-        match arg {
-            Val::Integer(int) => {
-                args.push(GuestArg::new(int, false));
-            }
-
-            Val::Float(float) => {
-                args.push(GuestArg::new(float, false));
-            }
-
-            Val::Long(long) => {
-                args.push(GuestArg::new(long, false));
-            }
-
-            Val::Bool(bool) => {
-                args.push(GuestArg::new(bool, false));
-            }
-
-            Val::RefInteger(int) => {
-                args.push(GuestArg::new(*int, true));
-            }
-
-            Val::RefFloat(float) => {
-                args.push(GuestArg::new(*float, true));
-            }
-
-            Val::RefLong(long) => {
-                args.push(GuestArg::new(*long, true));
-            }
-
-            Val::RefBool(bool) => {
-                args.push(GuestArg::new(*bool, true));
-            }
-
-            Val::MutRefInteger(int) => {
-                args.push(GuestArg::new(*int, true));
-            }
-
-            Val::MutRefFloat(float) => {
-                args.push(GuestArg::new(*float, true));
-            }
-
-            Val::MutRefLong(long) => {
-                args.push(GuestArg::new(*long, true));
-            }
-
-            Val::MutRefBool(bool) => {
-                args.push(GuestArg::new(*bool, true));
-            }
-
-            Val::Vector3(vec) => {
-                args.push(GuestArg::new(vec, false));
-            }
-
-            Val::RefVector3(vec) => {
-                args.push(GuestArg::new(*vec, true));
-            }
-
-            Val::MutRefVector3(vec) => {
-                args.push(GuestArg::new(*vec, true));
-            }
+    let args = iter
+        .map(|arg| match arg {
+            Val::Integer(int) => GuestArg::new(int, false),
+            Val::Float(float) => GuestArg::new(float, false),
+            Val::Long(long) => GuestArg::new(long, false),
+            Val::Bool(bool) => GuestArg::new(bool, false),
+            Val::RefInteger(int) => GuestArg::new(*int, true),
+            Val::RefFloat(float) => GuestArg::new(*float, true),
+            Val::RefLong(long) => GuestArg::new(*long, true),
+            Val::RefBool(bool) => GuestArg::new(*bool, true),
+            Val::MutRefInteger(int) => GuestArg::new(*int, true),
+            Val::MutRefFloat(float) => GuestArg::new(*float, true),
+            Val::MutRefLong(long) => GuestArg::new(*long, true),
+            Val::MutRefBool(bool) => GuestArg::new(*bool, true),
+            Val::Vector3(vec) => GuestArg::new(vec, false),
+            Val::RefVector3(vec) => GuestArg::new(*vec, true),
+            Val::MutRefVector3(vec) => GuestArg::new(*vec, true),
 
             Val::String(string) => {
                 let cstr = std::ffi::CString::new(*string).unwrap();
@@ -198,16 +156,11 @@ where
 
                 strings.push(cstr);
 
-                args.push(GuestArg::new(unsafe { &*ptr }, true));
+                GuestArg::new(unsafe { &*ptr }, true)
             }
 
-            Val::Bytes(bytes) => {
-                args.push(GuestArg::new(unsafe { &*bytes.as_ptr() }, true));
-            }
-
-            Val::MutBytes(bytes) => {
-                args.push(GuestArg::new(unsafe { &*bytes.as_ptr() }, true));
-            }
+            Val::Bytes(bytes) => GuestArg::new(unsafe { &*bytes.as_ptr() }, true),
+            Val::MutBytes(bytes) => GuestArg::new(unsafe { &*bytes.as_ptr() }, true),
 
             Val::RefFunc(func) => {
                 let cstr = std::ffi::CString::new(func.name()).unwrap();
@@ -215,10 +168,10 @@ where
 
                 strings.push(cstr);
 
-                args.push(GuestArg::new(unsafe { &*ptr }, true));
+                GuestArg::new(unsafe { &*ptr }, true)
             }
-        }
-    }
+        })
+        .collect::<Vec<GuestArg>>();
 
     RETVAL_BUFFER.with(|buf| unsafe {
         let retval = ReturnValue::new::<Ret>(&buf.borrow());

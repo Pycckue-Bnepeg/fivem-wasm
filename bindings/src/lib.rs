@@ -10,20 +10,16 @@ pub mod client {
     pub use fivem_client::{emit_net, events, TaskSequenceBuilder};
 }
 
-pub mod shared {
-    pub use fivem_shared::natives::*;
-}
-
 pub mod events {
     pub use fivem_core::events::{
         emit, set_event_handler, subscribe, subscribe_raw, Event, RawEvent,
     };
 
     #[cfg(feature = "server")]
-    pub use fivem_server::emit_net;
+    pub use fivem_server::emit_net as emit_to_client;
 
-    // #[cfg(feature = "client")]
-    // pub use fivem_client::emit_net;
+    #[cfg(feature = "client")]
+    pub use fivem_client::emit_net as emit_to_server;
 }
 
 pub mod runtime {

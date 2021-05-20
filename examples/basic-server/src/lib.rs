@@ -40,12 +40,12 @@ async fn show_something(event: PlayerConnecting) {
 fn print_my_keys() {
     println!("START FINDING KEYS:");
 
-    let handle = fivem::shared::cfx::start_find_kvp("my:");
-    while let Some(key) = fivem::shared::cfx::find_kvp(handle) {
+    let handle = fivem::server::cfx::start_find_kvp("my:");
+    while let Some(key) = fivem::server::cfx::find_kvp(handle) {
         println!("found a new key: {:?}", key);
     }
 
-    fivem::shared::cfx::end_find_kvp(handle);
+    fivem::server::cfx::end_find_kvp(handle);
 
     println!("DONE FINDING KEYS");
 }
@@ -82,36 +82,36 @@ async fn test_exports() {
 #[no_mangle]
 pub extern "C" fn _start() {
     // cleanup prev
-    fivem::shared::cfx::delete_resource_kvp("my:int");
-    fivem::shared::cfx::delete_resource_kvp("my:str");
-    fivem::shared::cfx::delete_resource_kvp("my:float");
+    fivem::server::cfx::delete_resource_kvp("my:int");
+    fivem::server::cfx::delete_resource_kvp("my:str");
+    fivem::server::cfx::delete_resource_kvp("my:float");
 
     println!("BEFORE:");
 
-    println!("{:?}", fivem::shared::cfx::get_resource_kvp_int("my:int"));
+    println!("{:?}", fivem::server::cfx::get_resource_kvp_int("my:int"));
     println!(
         "{:?}",
-        fivem::shared::cfx::get_resource_kvp_string("my:str")
+        fivem::server::cfx::get_resource_kvp_string("my:str")
     );
     println!(
         "{:?}",
-        fivem::shared::cfx::get_resource_kvp_float("my:float")
+        fivem::server::cfx::get_resource_kvp_float("my:float")
     );
 
-    fivem::shared::cfx::set_resource_kvp("my:str", "stringify");
-    fivem::shared::cfx::set_resource_kvp_float("my:float", 1345.5);
-    fivem::shared::cfx::set_resource_kvp_int("my:int", 55561);
+    fivem::server::cfx::set_resource_kvp("my:str", "stringify");
+    fivem::server::cfx::set_resource_kvp_float("my:float", 1345.5);
+    fivem::server::cfx::set_resource_kvp_int("my:int", 55561);
 
     println!("AFTER:");
 
-    println!("{:?}", fivem::shared::cfx::get_resource_kvp_int("my:int"));
+    println!("{:?}", fivem::server::cfx::get_resource_kvp_int("my:int"));
     println!(
         "{:?}",
-        fivem::shared::cfx::get_resource_kvp_string("my:str")
+        fivem::server::cfx::get_resource_kvp_string("my:str")
     );
     println!(
         "{:?}",
-        fivem::shared::cfx::get_resource_kvp_float("my:float")
+        fivem::server::cfx::get_resource_kvp_float("my:float")
     );
 
     print_my_keys();

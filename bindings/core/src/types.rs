@@ -34,6 +34,7 @@ pub struct ReturnValue {
 }
 
 impl ReturnValue {
+    #[inline]
     pub unsafe fn new<T: RetVal>(buf: &Vec<u8>) -> ReturnValue {
         ReturnValue {
             rettype: T::IDENT as _,
@@ -81,6 +82,7 @@ impl<T: DeserializeOwned> Packed<T> {
 unsafe impl RetVal for () {
     const IDENT: ReturnType = ReturnType::Empty;
 
+    #[inline]
     unsafe fn convert(_: &[u8]) -> Self {
         ()
     }
@@ -89,6 +91,7 @@ unsafe impl RetVal for () {
 unsafe impl RetVal for String {
     const IDENT: ReturnType = ReturnType::String;
 
+    #[inline]
     unsafe fn convert(bytes: &[u8]) -> Self {
         std::str::from_utf8_unchecked(bytes).to_owned()
     }
@@ -97,6 +100,7 @@ unsafe impl RetVal for String {
 unsafe impl RetVal for Vector3 {
     const IDENT: ReturnType = ReturnType::Vector3;
 
+    #[inline]
     unsafe fn convert(bytes: &[u8]) -> Self {
         (bytes.as_ptr() as *const Vector3).read()
     }
@@ -132,6 +136,7 @@ macro_rules! impl_for_primitives {
         $(unsafe impl RetVal for $type {
             const IDENT: ReturnType = ReturnType::Number;
 
+            #[inline]
             unsafe fn convert(bytes: &[u8]) -> Self {
                 (bytes.as_ptr() as *const $type).read()
             }
@@ -149,12 +154,14 @@ pub trait AsCharPtr {
 }
 
 impl AsCharPtr for &str {
+    #[inline]
     fn as_char_ptr(&self) -> CharPtr {
         CharPtr::String(self)
     }
 }
 
 impl AsCharPtr for &[u8] {
+    #[inline]
     fn as_char_ptr(&self) -> CharPtr {
         CharPtr::Bytes(self)
     }
@@ -175,6 +182,7 @@ pub struct GuestArg {
 }
 
 impl GuestArg {
+    #[inline]
     pub fn new<T: Sized>(argument: &T, is_ref: bool) -> GuestArg {
         GuestArg {
             is_ref,
