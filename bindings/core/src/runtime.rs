@@ -50,7 +50,7 @@ fn fire_timers() {
 
     TIMERS.with(|timers| {
         let mut timers = timers.borrow_mut();
-        let expiered: Vec<Instant> = timers.range(..=now).map(|(time, _)| time.clone()).collect();
+        let expiered: Vec<Instant> = timers.range(..=now).map(|(time, _)| *time).collect();
 
         for key in expiered {
             if let Some(senders) = timers.remove(&key) {
@@ -69,7 +69,7 @@ pub fn sleep_for(duration: Duration) -> impl Future<Output = ()> {
 
     TIMERS.with(|timers| {
         let mut timers = timers.borrow_mut();
-        let entry = timers.entry(instant).or_insert_with(|| vec![]);
+        let entry = timers.entry(instant).or_insert_with(Vec::new);
         entry.push(tx);
     });
 

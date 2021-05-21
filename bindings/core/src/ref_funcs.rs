@@ -1,6 +1,10 @@
 use crate::types::ScrObject;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 mod ffi {
     #[link(wasm_import_module = "host")]
@@ -12,7 +16,7 @@ mod ffi {
 thread_local! {
     static BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; 1 << 15]);
     static RETVAL: RefCell<ScrObject> = RefCell::new(ScrObject { data: 0, length: 0 });
-    static HANDLERS: RefCell<HashMap<u32, Rc<RefCell<InnerRefFunction>>>> = RefCell::new(HashMap::new());
+    static HANDLERS: RefCell<HashMap<u32, Rc<InnerRefFunction>>> = RefCell::new(HashMap::new());
     static REF_IDX: RefCell<u32> = RefCell::new(0);
 }
 
@@ -28,19 +32,12 @@ pub unsafe extern "C" fn __cfx_call_ref(
         let handlers = handlers.borrow();
 
         if let Some(handler) = handlers.get(&ref_idx) {
-            let mut handler = handler.borrow_mut();
-
             BUFFER.with(|buf| {
-                let mut buf = buf.borrow_mut();
-
-                unsafe {
-                    buf.set_len(0);
-                }
-
-                handler.handle(args, &mut buf);
+                handler.handle(args, buf);
 
                 RETVAL.with(|retval| {
                     let mut retval = retval.borrow_mut();
+                    let buf = buf.borrow();
 
                     retval.data = buf.as_ptr() as _;
                     retval.length = buf.len() as _;
@@ -56,9 +53,10 @@ pub unsafe extern "C" fn __cfx_call_ref(
 pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
     HANDLERS.with(|handlers| {
         let handlers = handlers.borrow();
-        handlers
-            .get(&ref_idx)
-            .map(|handler| handler.borrow_mut().refs += 1);
+        if let Some(handler) = handlers.get(&ref_idx) {
+            let refs = handler.refs.get();
+            handler.refs.set(refs + 1);
+        }
     });
 
     ref_idx
@@ -67,14 +65,21 @@ pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
 #[no_mangle]
 pub unsafe extern "C" fn __cfx_remove_ref(ref_idx: u32) {
     HANDLERS.with(|handlers| {
-        let mut handlers = handlers.borrow_mut();
+        let remove = {
+            let handlers = handlers.borrow();
 
-        if let Some(handler) = handlers.get(&ref_idx) {
-            handler.borrow_mut().refs -= 1;
+            if let Some(handler) = handlers.get(&ref_idx) {
+                let refs = handler.refs.get();
+                handler.refs.set(refs - 1);
 
-            if handler.borrow().refs <= 0 {
-                handlers.remove(&ref_idx);
+                refs <= 1
+            } else {
+                false
             }
+        };
+
+        if remove {
+            handlers.borrow_mut().remove(&ref_idx);
         }
     });
 }
@@ -120,13 +125,13 @@ fn canonicalize_ref(ref_idx: u32) -> String {
 }
 
 struct InnerRefFunction {
-    idx: u32,
-    func: Box<dyn FnMut(&[u8], &mut Vec<u8>)>,
-    refs: i32,
+    _idx: u32,
+    func: Box<dyn Fn(&[u8], &RefCell<Vec<u8>>)>,
+    refs: Cell<i32>,
 }
 
 impl InnerRefFunction {
-    fn handle(&mut self, input: &[u8], output: &mut Vec<u8>) {
+    fn handle(&self, input: &[u8], output: &RefCell<Vec<u8>>) {
         (self.func)(input, output);
     }
 }
@@ -157,13 +162,13 @@ impl ExternRefFunction {
 #[derive(Clone)]
 pub struct RefFunction {
     name: String,
-    inner: Rc<RefCell<InnerRefFunction>>,
+    inner: Rc<InnerRefFunction>,
 }
 
 impl RefFunction {
-    pub fn new<Handler, Input, Output>(mut handler: Handler) -> RefFunction
+    pub fn new<Handler, Input, Output>(handler: Handler) -> RefFunction
     where
-        Handler: FnMut(Input) -> Output + 'static,
+        Handler: Fn(Input) -> Output + 'static,
         Input: DeserializeOwned,
         Output: Serialize,
     {
@@ -175,34 +180,39 @@ impl RefFunction {
 
         let name = canonicalize_ref(idx);
 
-        let func = move |input: &[u8], out_buf: &mut Vec<u8>| {
+        let func = move |input: &[u8], out_buf: &RefCell<Vec<u8>>| {
             let input = rmp_serde::decode::from_read(input).unwrap();
             let out = handler(input);
-            let _ = rmp_serde::encode::write_named(out_buf, &out);
+            {
+                let mut out_buf = out_buf.borrow_mut();
+
+                unsafe {
+                    out_buf.set_len(0);
+                }
+
+                let _ = rmp_serde::encode::write_named(&mut *out_buf, &out);
+            }
         };
 
         let inner = InnerRefFunction {
-            idx,
+            _idx: idx,
             func: Box::new(func),
-            refs: 0,
+            refs: Cell::new(0),
         };
 
-        let inner = Rc::new(RefCell::new(inner));
+        let inner = Rc::new(inner);
 
         HANDLERS.with(|handlers| {
             let mut handlers = handlers.borrow_mut();
             handlers.insert(idx, inner.clone());
         });
 
-        RefFunction {
-            name,
-            inner: inner.clone(),
-        }
+        RefFunction { name, inner }
     }
 
-    pub fn new_raw<Handler>(mut handler: Handler) -> RefFunction
+    pub fn new_raw<Handler>(handler: Handler) -> RefFunction
     where
-        Handler: FnMut(&[u8]) -> Vec<u8> + 'static,
+        Handler: Fn(&[u8]) -> Vec<u8> + 'static,
     {
         let idx = REF_IDX.with(|idx| {
             let mut idx = idx.borrow_mut();
@@ -212,28 +222,33 @@ impl RefFunction {
 
         let name = canonicalize_ref(idx);
 
-        let func = move |input: &[u8], out_buf: &mut Vec<u8>| {
+        let func = move |input: &[u8], out_buf: &RefCell<Vec<u8>>| {
             let out = handler(input);
-            out_buf.extend(out.iter());
+            {
+                let mut out_buf = out_buf.borrow_mut();
+
+                unsafe {
+                    out_buf.set_len(0);
+                }
+
+                out_buf.extend(out.iter());
+            }
         };
 
         let inner = InnerRefFunction {
-            idx,
+            _idx: idx,
             func: Box::new(func),
-            refs: 0,
+            refs: Cell::new(0),
         };
 
-        let inner = Rc::new(RefCell::new(inner));
+        let inner = Rc::new(inner);
 
         HANDLERS.with(|handlers| {
             let mut handlers = handlers.borrow_mut();
             handlers.insert(idx, inner.clone());
         });
 
-        RefFunction {
-            name,
-            inner: inner.clone(),
-        }
+        RefFunction { name, inner }
     }
 
     pub(crate) fn name(&self) -> &str {

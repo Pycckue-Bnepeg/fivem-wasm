@@ -40,7 +40,7 @@ pub fn import_function(resource: &str, export: &str) -> Option<ExternRefFunction
 
     let result = link.borrow();
 
-    result.as_ref().map(|ext| ext.clone())
+    result.as_ref().cloned()
 }
 
 /// Make an export of the current resource with a given name.

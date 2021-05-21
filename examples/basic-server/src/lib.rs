@@ -69,19 +69,6 @@ async fn show_something(event: PlayerConnecting) {
     // event.deferrals.done.invoke::<(), _>(vec![done_msg]);
 }
 
-fn print_my_keys() {
-    println!("START FINDING KEYS:");
-
-    let handle = fivem::server::cfx::start_find_kvp("my:");
-    while let Some(key) = fivem::server::cfx::find_kvp(handle) {
-        println!("found a new key: {:?}", key);
-    }
-
-    fivem::server::cfx::end_find_kvp(handle);
-
-    println!("DONE FINDING KEYS");
-}
-
 fn create_export() {
     #[derive(Debug, Deserialize)]
     struct Vector {
@@ -113,40 +100,6 @@ async fn test_exports() {
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    // cleanup prev
-    fivem::server::cfx::delete_resource_kvp("my:int");
-    fivem::server::cfx::delete_resource_kvp("my:str");
-    fivem::server::cfx::delete_resource_kvp("my:float");
-
-    println!("BEFORE:");
-
-    println!("{:?}", fivem::server::cfx::get_resource_kvp_int("my:int"));
-    println!(
-        "{:?}",
-        fivem::server::cfx::get_resource_kvp_string("my:str")
-    );
-    println!(
-        "{:?}",
-        fivem::server::cfx::get_resource_kvp_float("my:float")
-    );
-
-    fivem::server::cfx::set_resource_kvp("my:str", "stringify");
-    fivem::server::cfx::set_resource_kvp_float("my:float", 1345.5);
-    fivem::server::cfx::set_resource_kvp_int("my:int", 55561);
-
-    println!("AFTER:");
-
-    println!("{:?}", fivem::server::cfx::get_resource_kvp_int("my:int"));
-    println!(
-        "{:?}",
-        fivem::server::cfx::get_resource_kvp_string("my:str")
-    );
-    println!(
-        "{:?}",
-        fivem::server::cfx::get_resource_kvp_float("my:float")
-    );
-
-    print_my_keys();
     create_export();
 
     let task = test_exports();

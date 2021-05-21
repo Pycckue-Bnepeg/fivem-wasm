@@ -14,5 +14,6 @@ members = [
 
     # examples
     "examples/basic-client",
-    "examples/basic-server"
+    "examples/basic-server",
+    "examples/bench",
 ]

@@ -83,9 +83,7 @@ unsafe impl RetVal for () {
     const IDENT: ReturnType = ReturnType::Empty;
 
     #[inline]
-    unsafe fn convert(_: &[u8]) -> Self {
-        ()
-    }
+    unsafe fn convert(_: &[u8]) -> Self {}
 }
 
 unsafe impl RetVal for String {

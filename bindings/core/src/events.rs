@@ -26,7 +26,7 @@ struct EventSub {
 
 enum EventHandler {
     Future(UnboundedSender<RawEvent>),
-    Function(Box<dyn FnMut(RawEvent) + 'static>),
+    Function(Box<dyn Fn(RawEvent) + 'static>),
 }
 
 // TODO: Vec<UnboundedSender<Event>>
@@ -49,14 +49,14 @@ pub unsafe extern "C" fn __cfx_on_event(
 
     let mut event = RawEvent {
         name,
-        payload,
         source,
+        payload,
     };
 
     EVENTS.with(|events| {
-        let mut events = events.borrow_mut();
+        let events = events.borrow();
 
-        if let Some(sub) = events.get_mut(&event.name) {
+        if let Some(sub) = events.get(&event.name) {
             if event.source.starts_with("net:") {
                 if sub.scope != EventScope::Network {
                     return;
@@ -74,9 +74,10 @@ pub unsafe extern "C" fn __cfx_on_event(
             }
 
             match sub.handler {
-                EventHandler::Function(ref mut func) => {
+                EventHandler::Function(ref func) => {
                     func(event);
                 }
+
                 EventHandler::Future(ref sender) => {
                     let _ = sender.unbounded_send(event);
                 }
@@ -188,9 +189,9 @@ pub fn subscribe_raw(event_name: &str, scope: EventScope) -> impl Stream<Item = 
 ///
 /// It is useful for events that contains [`crate::ref_funcs::ExternRefFunction`] to call it.
 /// Internaly this function is used in [`crate::exports::make_export`].
-pub fn set_event_handler<In, Handler>(event_name: &str, mut handler: Handler, scope: EventScope)
+pub fn set_event_handler<In, Handler>(event_name: &str, handler: Handler, scope: EventScope)
 where
-    Handler: FnMut(Event<In>) + 'static,
+    Handler: Fn(Event<In>) + 'static,
     In: DeserializeOwned,
 {
     let raw_handler = move |raw_event: RawEvent| {

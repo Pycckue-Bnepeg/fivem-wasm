@@ -10,12 +10,14 @@ $build = $args[0];
 # так сказать local dev
 cargo wasi build --package basic-client --release
 cargo wasi build --package basic-server --release
+cargo wasi build --package bench --release
 cargo build --package cfx-component-glue --release
 
 Copy-Item "E:\sources\projects\fivem-wasm\target\release\cfx_component_glue.lib" -Destination "E:\sources\c\fivem-fork\vendor\fivem-wasm\target\release\" -Force
 Copy-Item "E:\sources\projects\fivem-wasm\glue\cfx-wasm-runtime.h" -Destination "E:\sources\c\fivem-fork\vendor\fivem-wasm\glue\" -Force
 Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\basic_client.wasm" -Destination "E:\sources\c\fivem-fork\code\bin\server\windows\release\resources\main\" -Force
 Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\basic_server.wasm" -Destination "E:\sources\c\fivem-fork\code\bin\server\windows\release\resources\main\" -Force
+Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\bench.wasm" -Destination "E:\sources\c\fivem-fork\code\bin\server\windows\release\resources\wasmbench\" -Force
 
 # Pop-Location -StackName FiveMWasm;
 
