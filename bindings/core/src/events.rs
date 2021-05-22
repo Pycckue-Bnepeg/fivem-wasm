@@ -246,3 +246,38 @@ pub fn emit<T: Serialize>(event_name: &str, payload: T) {
         let _ = crate::invoker::invoke::<(), _>(0x91310870, args); // TRIGGER_EVENT_INTERNAL
     }
 }
+
+pub trait Handler<'de> {
+    type Input: Deserialize<'de>;
+
+    fn handle<'a>(&self, source: &str, input: &'a Self::Input);
+}
+
+pub fn set_event_handler_test<T>(event_name: &str, handler: T, scope: EventScope)
+where
+    for<'de> T: Handler<'de> + 'static,
+{
+    let raw_handler = move |raw_event: RawEventRef| {
+        let RawEventRef {
+            source, payload, ..
+        } = raw_event;
+
+        let event = rmp_serde::from_read_ref::<_, T::Input>(&payload).ok();
+
+        if let Some(payload) = event {
+            handler.handle(source.as_ref(), &payload);
+        }
+    };
+
+    EVENTS.with(|events| {
+        let sub = EventSub {
+            scope,
+            handler: EventHandler::Function(Box::new(raw_handler)),
+        };
+
+        let mut events = events.borrow_mut();
+        events.insert(event_name.to_owned(), sub);
+    });
+
+    let _ = crate::invoker::register_resource_as_event_handler(event_name);
+}
