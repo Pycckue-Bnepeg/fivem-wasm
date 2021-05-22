@@ -26,7 +26,7 @@ pub mod events {
         // source: String,
     }
 
-    pub fn player_connecting() -> impl Stream<Item = Event<PlayerConnecting>> {
+    pub fn player_connecting<'a>() -> impl Stream<Item = Event<'a, PlayerConnecting>> {
         fivem_core::events::subscribe("playerConnecting", fivem_core::events::EventScope::Local)
     }
 }

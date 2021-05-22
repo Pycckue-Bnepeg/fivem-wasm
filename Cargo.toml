@@ -17,3 +17,6 @@ members = [
     "examples/basic-server",
     "examples/bench",
 ]
+
+[profile.release]
+lto = true

@@ -82,7 +82,7 @@ pub fn make_export(export: &str, func: RefFunction) {
     crate::events::set_event_handler(
         &export,
         move |event: Event<GetExport>| {
-            let ext_func = event.payload().func.clone();
+            let ext_func = &event.payload().func;
             ext_func.invoke::<(), _>(vec![func.as_extern_ref_func()]);
         },
         crate::events::EventScope::Local,

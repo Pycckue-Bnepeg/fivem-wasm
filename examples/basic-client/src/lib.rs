@@ -41,7 +41,9 @@ async fn listen_to_pongs() {
         counter: u64,
     }
 
-    let mut events = fivem::events::subscribe::<Pong>("server_pong", EventScope::Network);
+    let events = fivem::events::subscribe::<Pong>("server_pong", EventScope::Network);
+
+    futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
         let pong = event.payload();

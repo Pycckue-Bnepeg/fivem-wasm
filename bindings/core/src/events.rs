@@ -3,20 +3,34 @@ use futures::{
     Stream, StreamExt,
 };
 
-use serde::{de::DeserializeOwned, Serialize};
-use std::{cell::RefCell, collections::HashMap, ffi::CStr};
+use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, cell::RefCell, ffi::CStr};
+
+use rustc_hash::FxHashMap;
 
 use crate::invoker::Val;
 
 /// A raw event contains bytes from the emitters.
 #[derive(Debug)]
 pub struct RawEvent {
-    /// A name of an event
-    pub name: String,
     /// A source who triggered an event
     pub source: String,
     /// Payload of an event
     pub payload: Vec<u8>,
+}
+
+pub struct RawEventRef<'a> {
+    source: Cow<'a, str>,
+    payload: &'a [u8],
+}
+
+impl<'a> RawEventRef<'a> {
+    fn to_raw_event(&self) -> RawEvent {
+        RawEvent {
+            source: self.source.to_string(),
+            payload: self.payload.into(),
+        }
+    }
 }
 
 struct EventSub {
@@ -26,13 +40,13 @@ struct EventSub {
 
 enum EventHandler {
     Future(UnboundedSender<RawEvent>),
-    Function(Box<dyn Fn(RawEvent) + 'static>),
+    Function(Box<dyn Fn(RawEventRef) + 'static>),
 }
 
 // TODO: Vec<UnboundedSender<Event>>
 thread_local! {
     // static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
-    static EVENTS: RefCell<HashMap<String, EventSub>> = RefCell::new(HashMap::new());
+    static EVENTS: RefCell<FxHashMap<String, EventSub>> = RefCell::new(FxHashMap::default());
 }
 
 #[doc(hidden)]
@@ -43,35 +57,32 @@ pub unsafe extern "C" fn __cfx_on_event(
     args_length: u32,
     source: *const i8,
 ) {
-    let name = CStr::from_ptr(cstring).to_str().unwrap().to_owned();
-    let payload = Vec::from(std::slice::from_raw_parts(args, args_length as _));
-    let source = CStr::from_ptr(source).to_str().unwrap().to_owned();
-
-    let mut event = RawEvent {
-        name,
-        source,
-        payload,
-    };
+    let name = CStr::from_ptr(cstring).to_str().unwrap();
+    let payload = std::slice::from_raw_parts(args, args_length as _);
+    let source = CStr::from_ptr(source).to_str().unwrap();
 
     EVENTS.with(|events| {
         let events = events.borrow();
 
-        if let Some(sub) = events.get(&event.name) {
-            if event.source.starts_with("net:") {
+        if let Some(sub) = events.get(name) {
+            let source = if source.starts_with("net:") {
                 if sub.scope != EventScope::Network {
                     return;
                 }
 
-                event.source = event.source.strip_prefix("net:").unwrap().to_owned();
+                Cow::from(source.strip_prefix("net:").unwrap())
             } else if
             /* is_duplicity_version && */
-            event.source.starts_with("internal-net:") {
-                event.source = event
-                    .source
-                    .strip_prefix("internal-net:")
-                    .unwrap()
-                    .to_owned();
-            }
+            source.starts_with("internal-net:") {
+                Cow::from(source.strip_prefix("internal-net:").unwrap())
+            } else {
+                Cow::from("")
+            };
+
+            let event = RawEventRef {
+                source: Cow::from(source),
+                payload,
+            };
 
             match sub.handler {
                 EventHandler::Function(ref func) => {
@@ -79,7 +90,7 @@ pub unsafe extern "C" fn __cfx_on_event(
                 }
 
                 EventHandler::Future(ref sender) => {
-                    let _ = sender.unbounded_send(event);
+                    let _ = sender.unbounded_send(event.to_raw_event());
                 }
             }
         }
@@ -92,14 +103,13 @@ pub unsafe extern "C" fn __cfx_on_event(
     });
 }
 
-/// A generic event representation.
-#[derive(Debug)]
-pub struct Event<T: DeserializeOwned> {
-    source: String,
+/// Same as [`Event`] but without clone and allocations (for [`set_event_handler`]).
+pub struct Event<'de, T: Deserialize<'de> + 'de> {
+    source: Cow<'de, str>,
     payload: T,
 }
 
-impl<T: DeserializeOwned> Event<T> {
+impl<'de, T: Deserialize<'de> + 'de> Event<'de, T> {
     /// Get a source that triggered that event.
     pub fn source(&self) -> &str {
         &self.source
@@ -146,21 +156,24 @@ pub enum EventScope {
 /// # Ok(())
 /// # }
 ///
-pub fn subscribe<T: DeserializeOwned>(
-    event_name: &str,
-    scope: EventScope,
-) -> impl Stream<Item = Event<T>> {
-    subscribe_raw(event_name, scope)
-        .filter_map(|event| async move {
-            rmp_serde::from_read(event.payload.as_slice())
-                .ok()
-                .map(|payload| (event, payload))
-        })
-        .map(|(event, payload)| Event {
-            source: event.source,
-            payload,
-        })
-        .boxed_local()
+pub fn subscribe<'a, In>(event_name: &'a str, scope: EventScope) -> impl Stream<Item = Event<In>>
+where
+    for<'de> In: Deserialize<'de> + 'a,
+{
+    let mut events = subscribe_raw(event_name, scope);
+
+    async_stream::stream! {
+        while let Some(event) = events.next().await {
+            if let Ok(payload) = rmp_serde::from_read_ref(&event.payload) {
+                let event = Event {
+                    source: Cow::from(event.source),
+                    payload,
+                };
+
+                yield event;
+            }
+        }
+    }
 }
 
 /// Same as [`subscribe`] but returns [`RawEvent`].
@@ -179,7 +192,7 @@ pub fn subscribe_raw(event_name: &str, scope: EventScope) -> impl Stream<Item = 
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
 
-    rx.boxed_local()
+    rx
 }
 
 /// Sets an event handler.
@@ -192,18 +205,17 @@ pub fn subscribe_raw(event_name: &str, scope: EventScope) -> impl Stream<Item = 
 pub fn set_event_handler<In, Handler>(event_name: &str, handler: Handler, scope: EventScope)
 where
     Handler: Fn(Event<In>) + 'static,
-    In: DeserializeOwned,
+    for<'de> In: Deserialize<'de> + 'de,
 {
-    let raw_handler = move |raw_event: RawEvent| {
-        let event = rmp_serde::from_read(raw_event.payload.as_slice())
-            .ok()
-            .map(|payload| (raw_event, payload));
+    let raw_handler = move |raw_event: RawEventRef| {
+        let RawEventRef {
+            source, payload, ..
+        } = raw_event;
 
-        if let Some((event, payload)) = event {
-            let event = Event {
-                source: event.source,
-                payload,
-            };
+        let event = rmp_serde::from_read_ref::<_, In>(&payload).ok();
+
+        if let Some(payload) = event {
+            let event = Event { source, payload };
 
             handler(event);
         }

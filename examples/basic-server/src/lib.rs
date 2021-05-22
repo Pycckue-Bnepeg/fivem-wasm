@@ -3,7 +3,9 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 async fn handle_connections() {
-    let mut events = fivem::server::events::player_connecting();
+    let events = fivem::server::events::player_connecting();
+
+    futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
         fivem::log(format!(
@@ -26,7 +28,9 @@ async fn handle_custom_event() {
     struct Pong((String, u64));
 
     let mut counter = 0;
-    let mut events = fivem::events::subscribe::<Ping>("client_ping", EventScope::Network);
+    let events = fivem::events::subscribe::<Ping>("client_ping", EventScope::Network);
+
+    futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
         let ping = event.payload();

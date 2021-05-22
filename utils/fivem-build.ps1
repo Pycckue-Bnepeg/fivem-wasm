@@ -24,12 +24,12 @@ Copy-Item "E:\sources\projects\fivem-wasm\target\wasm32-wasi\release\bench.wasm"
 if ($build -eq "build") {
     Push-Location -Path "E:\sources\c\fivem-fork\code" -StackName FiveMWasm;
 
-    .\tools\ci\premake5.exe vs2019 --game=server
-    .\tools\ci\premake5.exe vs2019 --game=five
+    # .\tools\ci\premake5.exe vs2019 --game=server
+    # .\tools\ci\premake5.exe vs2019 --game=five
 
     Push-Location -Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin" -StackName FiveMWasm;
     ./MSbuild.exe "E:\sources\c\fivem-fork\code\build\server\windows\CitizenMP.sln" /t:Build /p:Configuration=Release /p:Platform=x64 -m
-    ./MSbuild.exe "E:\sources\c\fivem-fork\code\build\five\CitizenMP.sln" /t:Build /p:Configuration=Release -m
+    # ./MSbuild.exe "E:\sources\c\fivem-fork\code\build\five\CitizenMP.sln" /t:Build /p:Configuration=Release -m
 
     Pop-Location -StackName FiveMWasm;
     Pop-Location -StackName FiveMWasm;

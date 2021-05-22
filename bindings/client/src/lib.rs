@@ -12,7 +12,7 @@ pub mod events {
         pub resource_name: String,
     }
 
-    pub fn client_game_type_start() -> impl Stream<Item = Event<ClientGameTypeStart>> {
+    pub fn client_game_type_start<'a>() -> impl Stream<Item = Event<'a, ClientGameTypeStart>> {
         fivem_core::events::subscribe(
             "onClientGameTypeStart",
             fivem_core::events::EventScope::Local,

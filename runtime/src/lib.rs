@@ -66,13 +66,14 @@ impl Runtime {
         Ok(())
     }
 
+    #[inline]
     pub fn trigger_event(&mut self, event_name: &CStr, args: &[u8], source: &CStr) {
         if let Some(script) = self.script.as_mut() {
-            let wrapper = || -> Option<()> {
-                if let Some(func) = &script.on_event {
-                    let ev = script.alloc_bytes(event_name.to_bytes_with_nul())?;
-                    let args = script.alloc_bytes(args)?;
-                    let src = script.alloc_bytes(source.to_bytes_with_nul())?;
+            let mut wrapper = || -> Option<()> {
+                if let Some(func) = script.on_event.clone() {
+                    let ev = script.copy_event_name(event_name)?;
+                    let args = script.copy_event_args(args)?;
+                    let src = script.copy_event_source(source)?;
 
                     // event, args, args_len, src
                     func.call(&[
@@ -82,10 +83,6 @@ impl Runtime {
                         Val::I32(src.0 as _),
                     ])
                     .ok()?;
-
-                    script.free_bytes(ev)?;
-                    script.free_bytes(args)?;
-                    script.free_bytes(src)?;
                 }
 
                 Some(())
@@ -152,6 +149,15 @@ struct ScriptModule {
     store: Store,
     instance: Instance,
     on_event: Option<Func>,
+    event_allocs: EventAlloc,
+    memory: Memory,
+}
+
+#[derive(Default)]
+struct EventAlloc {
+    name: (u32, usize),
+    args: (u32, usize),
+    source: (u32, usize),
 }
 
 impl ScriptModule {
@@ -161,12 +167,23 @@ impl ScriptModule {
 
         let instance = Instance::new(&store, &module, &[])?;
         let on_event = instance.get_func(CFX_ON_EVENT);
+        let memory = instance
+            .get_memory("memory")
+            .ok_or(anyhow::anyhow!("No memory"))?;
 
-        Ok(ScriptModule {
+        let mut module = ScriptModule {
             store,
             instance,
             on_event,
-        })
+            memory,
+            event_allocs: EventAlloc::default(),
+        };
+
+        module
+            .make_startup_allocs()
+            .ok_or(anyhow::anyhow!("No memory"))?;
+
+        Ok(module)
     }
 
     fn new_with_wasi(engine: &Engine, bytes: &[u8]) -> anyhow::Result<ScriptModule> {
@@ -240,14 +257,26 @@ impl ScriptModule {
         let module = Module::new(engine, bytes)?;
         let instance = linker.instantiate(&module)?;
         let on_event = instance.get_func(CFX_ON_EVENT);
+        let memory = instance
+            .get_memory("memory")
+            .ok_or(anyhow::anyhow!("No memory"))?;
 
-        Ok(ScriptModule {
+        let mut module = ScriptModule {
             store,
             instance,
             on_event,
-        })
+            memory,
+            event_allocs: EventAlloc::default(),
+        };
+
+        module
+            .make_startup_allocs()
+            .ok_or(anyhow::anyhow!("No memory"))?;
+
+        Ok(module)
     }
 
+    #[inline]
     fn alloc_bytes(&self, bytes: &[u8]) -> Option<(u32, usize)> {
         let malloc = self
             .instance
@@ -255,13 +284,14 @@ impl ScriptModule {
             .ok()?;
 
         let data_ptr = malloc.call((bytes.len() as _, 1)).ok()?;
-        let mem = self.instance.get_memory("memory")?;
+        let mem = &self.memory;
 
         mem.write(data_ptr as _, bytes).ok()?;
 
         Some((data_ptr, bytes.len()))
     }
 
+    #[inline]
     fn free_bytes(&self, (offset, length): (u32, usize)) -> Option<()> {
         let free = self
             .instance
@@ -271,6 +301,77 @@ impl ScriptModule {
         free.call((offset as _, length as _, 1)).ok()?;
 
         Some(())
+    }
+
+    fn make_startup_allocs(&mut self) -> Option<()> {
+        self.event_allocs.name = self.alloc_bytes(&[0; 1024])?;
+        self.event_allocs.args = self.alloc_bytes(&[0; 1 << 15])?;
+        self.event_allocs.source = self.alloc_bytes(&[0; 1024])?;
+
+        Some(())
+    }
+
+    #[inline]
+    fn copy_event_name(&mut self, event_name: &CStr) -> Option<(u32, usize)> {
+        let bytes = event_name.to_bytes_with_nul();
+        let name = self.event_allocs.name;
+
+        if name.0 == 0 || name.1 < bytes.len() {
+            let new = self.alloc_bytes(bytes)?;
+
+            if name.0 != 0 {
+                self.free_bytes(name);
+            }
+
+            return Some(new);
+        }
+
+        let mem = &self.memory;
+        mem.write(name.0 as _, bytes).ok()?;
+
+        Some((name.0, bytes.len()))
+    }
+
+    #[inline]
+    fn copy_event_args(&mut self, event_args: &[u8]) -> Option<(u32, usize)> {
+        let bytes = event_args;
+        let args = self.event_allocs.args;
+
+        if args.0 == 0 || args.1 < bytes.len() {
+            let new = self.alloc_bytes(bytes)?;
+
+            if args.0 != 0 {
+                self.free_bytes(args);
+            }
+
+            return Some(new);
+        }
+
+        let mem = &self.memory;
+        mem.write(args.0 as _, bytes).ok()?;
+
+        Some((args.0, bytes.len()))
+    }
+
+    #[inline]
+    fn copy_event_source(&mut self, event_source: &CStr) -> Option<(u32, usize)> {
+        let bytes = event_source.to_bytes_with_nul();
+        let source = self.event_allocs.source;
+
+        if source.0 == 0 || source.1 < bytes.len() {
+            let new = self.alloc_bytes(bytes)?;
+
+            if source.0 != 0 {
+                self.free_bytes(source);
+            }
+
+            return Some(new);
+        }
+
+        let mem = &self.memory;
+        mem.write(source.0 as _, bytes).ok()?;
+
+        Some((source.0, bytes.len()))
     }
 }
 
