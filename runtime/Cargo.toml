@@ -5,7 +5,7 @@ authors = ["ZOTTCE <zottce@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-wasmtime = "0.26.0"
-wasmtime-wasi = "0.26.0"
+wasmtime = "0.27.0"
+wasmtime-wasi = "0.27.0"
 fivem-core = { path = "../bindings/core", default-features = false, features = ["types"] }
 anyhow = "1.0"

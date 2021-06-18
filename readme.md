@@ -22,5 +22,4 @@ This is a main repository implementing the runtime and containing bindings for R
 * Enjoy WASM in your FiveM server!
 
 ## TODOs
-* Maybe something else that I forgot ...
 * Wait till there will be ability to use `std::net::TcpStream` and othe net utils to build a good server.

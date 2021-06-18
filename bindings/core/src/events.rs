@@ -1,10 +1,10 @@
 use futures::{
     channel::mpsc::{unbounded, UnboundedSender},
-    Stream, StreamExt,
+    Future, Stream, StreamExt,
 };
 
-use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, cell::RefCell, ffi::CStr};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{borrow::Cow, cell::RefCell, ffi::CStr, rc::Rc};
 
 use rustc_hash::FxHashMap;
 
@@ -45,7 +45,6 @@ enum EventHandler {
 
 // TODO: Vec<UnboundedSender<Event>>
 thread_local! {
-    // static EVENTS: RefCell<HashMap<String, UnboundedSender<RawEvent>>> = RefCell::new(HashMap::new());
     static EVENTS: RefCell<FxHashMap<String, EventSub>> = RefCell::new(FxHashMap::default());
 }
 
@@ -79,10 +78,7 @@ pub unsafe extern "C" fn __cfx_on_event(
                 Cow::from("")
             };
 
-            let event = RawEventRef {
-                source: Cow::from(source),
-                payload,
-            };
+            let event = RawEventRef { source, payload };
 
             match sub.handler {
                 EventHandler::Function(ref func) => {
@@ -104,12 +100,12 @@ pub unsafe extern "C" fn __cfx_on_event(
 }
 
 /// Same as [`Event`] but without clone and allocations (for [`set_event_handler`]).
-pub struct Event<'de, T: Deserialize<'de> + 'de> {
+pub struct Event<'de, T: Deserialize<'de>> {
     source: Cow<'de, str>,
     payload: T,
 }
 
-impl<'de, T: Deserialize<'de> + 'de> Event<'de, T> {
+impl<'de, T: Deserialize<'de>> Event<'de, T> {
     /// Get a source that triggered that event.
     pub fn source(&self) -> &str {
         &self.source
@@ -124,6 +120,11 @@ impl<'de, T: Deserialize<'de> + 'de> Event<'de, T> {
     pub fn into_inner(self) -> T {
         self.payload
     }
+}
+
+pub struct EventOwned<T: DeserializeOwned> {
+    source: String,
+    payload: T,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,15 +198,15 @@ pub fn subscribe_raw(event_name: &str, scope: EventScope) -> impl Stream<Item = 
 
 /// Sets an event handler.
 ///
-/// The main difference between [`subscribe`] and [`set_event_handler`] is that
+/// The main difference between [`subscribe`] and [`set_event_handler_closure`] is that
 /// the last one calls the passed handler immediately after an event is triggered.
 ///
 /// It is useful for events that contains [`crate::ref_funcs::ExternRefFunction`] to call it.
 /// Internaly this function is used in [`crate::exports::make_export`].
-pub fn set_event_handler<In, Handler>(event_name: &str, handler: Handler, scope: EventScope)
+pub fn set_event_handler_closure<In, Handler>(event_name: &str, handler: Handler, scope: EventScope)
 where
     Handler: Fn(Event<In>) + 'static,
-    for<'de> In: Deserialize<'de> + 'de,
+    In: DeserializeOwned,
 {
     let raw_handler = move |raw_event: RawEventRef| {
         let RawEventRef {
@@ -247,25 +248,40 @@ pub fn emit<T: Serialize>(event_name: &str, payload: T) {
     }
 }
 
-pub trait Handler<'de> {
-    type Input: Deserialize<'de>;
+pub trait Handler<Input: DeserializeOwned> {
+    type Response;
+    type Error;
+    type Future: Future<Output = Result<Self::Response, Self::Error>>;
 
-    fn handle<'a>(&self, source: &str, input: &'a Self::Input);
+    fn handle(&mut self, source: String, event: Input) -> Self::Future;
 }
 
-pub fn set_event_handler_test<T>(event_name: &str, handler: T, scope: EventScope)
+pub fn set_event_handler<H, T>(event_name: &str, handler: H, scope: EventScope)
 where
-    for<'de> T: Handler<'de> + 'static,
+    H: Handler<T> + 'static,
+    T: DeserializeOwned + 'static,
 {
+    let handler = Rc::new(RefCell::new(handler));
+
     let raw_handler = move |raw_event: RawEventRef| {
         let RawEventRef {
             source, payload, ..
         } = raw_event;
 
-        let event = rmp_serde::from_read_ref::<_, T::Input>(&payload).ok();
+        let event = rmp_serde::from_read::<_, T>(payload).ok();
 
         if let Some(payload) = event {
-            handler.handle(source.as_ref(), &payload);
+            // let event = EventOwned {
+            //     source: source.to_owned().to_string(),
+            //     payload,
+            // };
+
+            let handler = handler.clone();
+            let source = source.to_string();
+
+            let _ = crate::runtime::spawn(async move {
+                let _ = handler.borrow_mut().handle(source, payload);
+            });
         }
     };
 
@@ -280,4 +296,27 @@ where
     });
 
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
+}
+
+pub struct HandlerFn<T> {
+    func: T,
+}
+
+pub fn handler_fn<T>(func: T) -> HandlerFn<T> {
+    HandlerFn { func }
+}
+
+impl<T, F, Input, R, E> Handler<Input> for HandlerFn<T>
+where
+    T: FnMut(String, Input) -> F,
+    F: Future<Output = Result<R, E>>,
+    Input: DeserializeOwned,
+{
+    type Response = R;
+    type Error = E;
+    type Future = F;
+
+    fn handle(&mut self, source: String, event: Input) -> Self::Future {
+        (self.func)(source, event)
+    }
 }

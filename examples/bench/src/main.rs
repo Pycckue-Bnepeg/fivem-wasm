@@ -98,6 +98,10 @@ fn bench_event_handler() {
     );
 }
 
+async fn event_handle(source: String, event: CustomEvent) -> Result<(), ()> {
+    Ok(())
+}
+
 fn main() {
     // startup
     fn create_export() {
@@ -106,27 +110,13 @@ fn main() {
     }
 
     fn set_event_handler() {
-        #[derive(Debug, Serialize, Deserialize)]
-        struct CustomEventRef<'a> {
-            int: u32,
-            string: &'a str,
-        }
-
-        struct WasmHandler;
-
-        impl<'de> fivem::events::Handler<'de> for WasmHandler {
-            type Input = CustomEventRef<'de>;
-
-            fn handle<'a>(&self, source: &str, input: &'a Self::Input) {}
-        }
-
-        fivem::events::set_event_handler_test(
+        fivem::events::set_event_handler(
             "wasmEventHandler",
-            WasmHandler,
+            fivem::events::handler_fn(event_handle),
             fivem::events::EventScope::Local,
         );
 
-        fivem::events::set_event_handler(
+        fivem::events::set_event_handler_closure(
             "wasmEventHandlerClosure",
             |_ev: Event<CustomEvent>| {},
             fivem::events::EventScope::Local,

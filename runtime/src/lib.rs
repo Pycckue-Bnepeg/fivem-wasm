@@ -38,7 +38,10 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new() -> Runtime {
-        let engine = Engine::default();
+        let mut config = Config::default();
+        config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+
+        let engine = Engine::new(&config).unwrap();
 
         Runtime {
             engine,
@@ -196,7 +199,7 @@ impl ScriptModule {
                 .inherit_stdout()
                 .inherit_stdio()
                 .inherit_stderr()
-                .build()?,
+                .build(),
         );
 
         wasi.add_to_linker(&mut linker)?;

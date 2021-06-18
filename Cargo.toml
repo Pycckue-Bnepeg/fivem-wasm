@@ -9,9 +9,6 @@ members = [
     "bindings/client",
     "bindings/server",
 
-    # test
-    "standalone",
-
     # examples
     "examples/basic-client",
     "examples/basic-server",

@@ -12,8 +12,8 @@ pub mod client {
 
 pub mod events {
     pub use fivem_core::events::{
-        emit, set_event_handler, set_event_handler_test, subscribe, subscribe_raw, Event,
-        EventScope, Handler, RawEvent,
+        emit, handler_fn, set_event_handler, set_event_handler_closure, subscribe, subscribe_raw,
+        Event, EventScope, Handler, HandlerFn, RawEvent,
     };
 
     #[cfg(feature = "server")]

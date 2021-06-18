@@ -79,7 +79,7 @@ pub fn make_export(export: &str, func: RefFunction) {
     let resource = crate::invoker::current_resource_name().unwrap();
     let export = export_name(&resource, export);
 
-    crate::events::set_event_handler(
+    crate::events::set_event_handler_closure(
         &export,
         move |event: Event<GetExport>| {
             let ext_func = &event.payload().func;
