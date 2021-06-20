@@ -1,18 +1,23 @@
-#[cfg(feature = "full")]
 pub mod events;
 #[doc(hidden)]
-#[cfg(feature = "full")]
 pub mod exports;
-#[cfg(feature = "full")]
 pub mod invoker;
-#[cfg(feature = "full")]
 pub mod ref_funcs;
-#[cfg(feature = "full")]
 pub mod runtime;
-#[cfg(feature = "types")]
-pub mod types;
+pub mod types {
+    pub use cfx_wasm_rt_types::*;
 
-#[cfg(feature = "full")]
+    pub trait ToMessagePack {
+        fn to_message_pack(&self) -> Vec<u8>;
+    }
+
+    impl<T: serde::Serialize> ToMessagePack for T {
+        fn to_message_pack(&self) -> Vec<u8> {
+            rmp_serde::to_vec(self).unwrap_or_else(|_| vec![])
+        }
+    }
+}
+
 mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
@@ -21,7 +26,6 @@ mod ffi {
 }
 
 /// Logs a message to the FiveM server or client
-#[cfg(feature = "full")]
 pub fn log<T: AsRef<str>>(message: T) {
     let msg = message.as_ref();
     let cstr = std::ffi::CString::new(msg).unwrap();

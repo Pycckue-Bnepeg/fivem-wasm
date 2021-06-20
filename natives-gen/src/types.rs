@@ -59,7 +59,7 @@ pub fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
                 }
             } else {
                 RustType {
-                    name: "impl fivem_core::types::AsCharPtr".to_owned(),
+                    name: "impl cfx_core::types::AsCharPtr".to_owned(),
                     convert: Some("as_char_ptr().into()".to_owned()),
                     may_be_default: false,
                 }
@@ -85,7 +85,7 @@ pub fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
         },
 
         "vector3" => RustType {
-            name: "fivem_core::types::Vector3".to_owned(),
+            name: "cfx_core::types::Vector3".to_owned(),
             convert: None,
             may_be_default: true,
         },
@@ -93,13 +93,13 @@ pub fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
         "func" => {
             if in_ret {
                 RustType {
-                    name: "fivem_core::ref_funcs::ExternRefFunction".to_owned(),
+                    name: "cfx_core::ref_funcs::ExternRefFunction".to_owned(),
                     convert: None,
                     may_be_default: false,
                 }
             } else {
                 RustType {
-                    name: "fivem_core::ref_funcs::RefFunction".to_owned(),
+                    name: "cfx_core::ref_funcs::RefFunction".to_owned(),
                     convert: None,
                     may_be_default: false,
                 }
@@ -109,14 +109,14 @@ pub fn convert_type(ty: &CfxType, in_ret: bool) -> RustType {
         "object" => {
             if in_ret {
                 RustType {
-                    name: "fivem_core::types::Packed<Ret>".to_owned(),
+                    name: "cfx_core::types::Packed<Ret>".to_owned(),
                     convert: None,
                     may_be_default: false,
                 }
             } else {
                 RustType {
                     name: "impl serde::Serialize".to_owned(),
-                    convert: None,
+                    convert: Some("to_message_pack().as_slice().into()".to_owned()),
                     may_be_default: false,
                 }
             }

@@ -1,20 +1,20 @@
-use fivem::{events::EventScope, ref_funcs::RefFunction, server::events::PlayerConnecting};
+use cfx::{events::EventScope, ref_funcs::RefFunction, server::events::PlayerConnecting};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 async fn handle_connections() {
-    let events = fivem::server::events::player_connecting();
+    let events = cfx::server::events::player_connecting();
 
     futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
-        fivem::log(format!(
+        cfx::log(format!(
             "A new player connected: {}. Event source: {:?}",
             event.payload().player_name,
             event.source(),
         ));
 
-        let _ = fivem::runtime::spawn(show_something(event.into_inner()));
+        let _ = cfx::runtime::spawn(show_something(event.into_inner()));
     }
 }
 
@@ -28,20 +28,20 @@ async fn handle_custom_event() {
     struct Pong((String, u64));
 
     let mut counter = 0;
-    let events = fivem::events::subscribe::<Ping>("client_ping", EventScope::Network);
+    let events = cfx::events::subscribe::<Ping>("client_ping", EventScope::Network);
 
     futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
         let ping = event.payload();
 
-        fivem::log(format!(
+        cfx::log(format!(
             "got a ping from {:?} with message: {:?}",
             event.source(),
             ping.req
         ));
 
-        fivem::events::emit_to_client(
+        cfx::events::emit_to_client(
             "server_pong",
             event.source(),
             Pong((ping.req.to_owned(), counter)),
@@ -54,7 +54,7 @@ async fn handle_custom_event() {
 async fn show_something(event: PlayerConnecting) {
     event.deferrals.defer.invoke::<(), ()>(());
 
-    fivem::runtime::sleep_for(std::time::Duration::from_millis(10)).await;
+    cfx::runtime::sleep_for(std::time::Duration::from_millis(10)).await;
 
     #[derive(Serialize)]
     struct UpdateMessage(String);
@@ -65,7 +65,7 @@ async fn show_something(event: PlayerConnecting) {
     let udp_msg = UpdateMessage(String::from("Hello from Rust! Wait 5 seconds, please ..."));
 
     event.deferrals.update.invoke::<(), _>(vec![udp_msg]);
-    fivem::runtime::sleep_for(std::time::Duration::from_secs(5)).await;
+    cfx::runtime::sleep_for(std::time::Duration::from_secs(5)).await;
     event.deferrals.done.invoke::<(), Vec<DoneMessage>>(vec![]);
 
     // reject a connection
@@ -90,7 +90,7 @@ fn create_export() {
         vec![0.0]
     });
 
-    fivem::exports::make_export("vecLength", export);
+    cfx::exports::make_export("vecLength", export);
 }
 
 async fn test_exports() {
@@ -98,18 +98,21 @@ async fn test_exports() {
     struct SomeObject(u32, f32, String);
 
     // exports("testique", (a, b, c) => console.log(`int: ${a} float: ${b} str: ${c}));
-    let testique = fivem::exports::import_function("emitjs", "testique").unwrap();
-    testique.invoke::<(), _>(SomeObject(5123, 10.5, String::from("hellow!")));
+    if let Some(testique) = cfx::exports::import_function("emitjs", "testique") {
+        testique.invoke::<(), _>(SomeObject(5123, 10.5, String::from("hellow!")));
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn _start() {
     create_export();
 
+    cfx::log("let's go!");
+
     let task = test_exports();
-    let _ = fivem::runtime::spawn(task);
+    let _ = cfx::runtime::spawn(task);
     let task = handle_connections();
-    let _ = fivem::runtime::spawn(task);
+    let _ = cfx::runtime::spawn(task);
     let task = handle_custom_event();
-    let _ = fivem::runtime::spawn(task);
+    let _ = cfx::runtime::spawn(task);
 }

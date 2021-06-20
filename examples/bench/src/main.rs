@@ -1,5 +1,5 @@
+use cfx::{events::Event, ref_funcs::RefFunction};
 use easybench::bench;
-use fivem::{events::Event, ref_funcs::RefFunction};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
@@ -7,9 +7,9 @@ const LONG_STRING: &str = include_str!("long.str");
 const SHORT_STRING: &str = "hello!";
 
 macro_rules! log {
-    () => (fivem::log("\n"));
+    () => (cfx::log("\n"));
     ($($arg:tt)*) => ({
-        fivem::log(std::format_args!($($arg)*).to_string());
+        cfx::log(std::format_args!($($arg)*).to_string());
     })
 }
 
@@ -20,7 +20,7 @@ struct CustomEvent {
 }
 
 fn bench_invoking() {
-    use fivem::server::cfx::*;
+    use cfx::server::cfx::*;
 
     log!(
         "bench_invoking::wasm::get_num_resources {}",
@@ -33,7 +33,7 @@ fn bench_invoking() {
 }
 
 fn bench_exports() {
-    use fivem::exports::import_function;
+    use cfx::exports::import_function;
 
     // exports are listening to an event with a special name
     // and calling the passed function
@@ -52,7 +52,7 @@ fn bench_exports() {
 }
 
 fn bench_event_handler() {
-    use fivem::events::emit;
+    use cfx::events::emit;
 
     #[derive(Debug, Serialize)]
     struct CustomEvent((u32, &'static str));
@@ -106,25 +106,25 @@ fn main() {
     // startup
     fn create_export() {
         let func = RefFunction::new(|_: Vec<u32>| {});
-        fivem::exports::make_export("exportBench", func);
+        cfx::exports::make_export("exportBench", func);
     }
 
     fn set_event_handler() {
-        fivem::events::set_event_handler(
+        cfx::events::set_event_handler(
             "wasmEventHandler",
-            fivem::events::handler_fn(event_handle),
-            fivem::events::EventScope::Local,
+            cfx::events::handler_fn(event_handle),
+            cfx::events::EventScope::Local,
         );
 
-        fivem::events::set_event_handler_closure(
+        cfx::events::set_event_handler_closure(
             "wasmEventHandlerClosure",
             |_ev: Event<CustomEvent>| {},
-            fivem::events::EventScope::Local,
+            cfx::events::EventScope::Local,
         );
 
-        let events = fivem::events::subscribe::<CustomEvent>(
+        let events = cfx::events::subscribe::<CustomEvent>(
             "wasmEventHandlerAsync",
-            fivem::events::EventScope::Local,
+            cfx::events::EventScope::Local,
         );
 
         let task = async move {
@@ -133,7 +133,7 @@ fn main() {
             while let Some(_ev) = events.next().await {}
         };
 
-        let _ = fivem::runtime::spawn(task);
+        let _ = cfx::runtime::spawn(task);
     }
 
     create_export();

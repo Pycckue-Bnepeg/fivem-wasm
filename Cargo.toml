@@ -1,7 +1,5 @@
 [workspace]
 members = [
-    "runtime",
-    "glue",
     "natives-gen",
 
     "bindings",
