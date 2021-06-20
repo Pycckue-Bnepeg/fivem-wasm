@@ -1,5 +1,5 @@
-use fivem::events::EventScope;
-use fivem::ref_funcs::{ExternRefFunction, RefFunction};
+use cfx::events::EventScope;
+use cfx::ref_funcs::{ExternRefFunction, RefFunction};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -24,7 +24,7 @@ const ANIM_DICT: &str = "random@shop_robbery";
 const ANIM_NAME: &str = "robbery_action_f";
 
 async fn play_animation() {
-    use fivem::client::TaskSequenceBuilder;
+    use cfx::client::TaskSequenceBuilder;
 
     TaskSequenceBuilder::new()
         .play_anim(
@@ -41,14 +41,14 @@ async fn listen_to_pongs() {
         counter: u64,
     }
 
-    let events = fivem::events::subscribe::<Pong>("server_pong", EventScope::Network);
+    let events = cfx::events::subscribe::<Pong>("server_pong", EventScope::Network);
 
     futures::pin_mut!(events);
 
     while let Some(event) = events.next().await {
         let pong = event.payload();
 
-        fivem::log(format!(
+        cfx::log(format!(
             "got a pong from {:?} with message: {:?}",
             event.source(),
             pong
@@ -70,7 +70,7 @@ fn set_command_handler() {
     }
 
     let handler = RefFunction::new(|_: Command| {
-        fivem::events::emit_to_server(
+        cfx::events::emit_to_server(
             "client_ping",
             Ping {
                 req: "pong me please".to_owned(),
@@ -78,7 +78,7 @@ fn set_command_handler() {
         );
     });
 
-    fivem::client::cfx::register_command("wasm_ping", handler, false);
+    cfx::client::cfx::register_command("wasm_ping", handler, false);
 }
 
 #[no_mangle]
@@ -95,30 +95,30 @@ pub extern "C" fn _start() {
     };
 
     let set_callback =
-        fivem::exports::import_function("spawnmanager", "setAutoSpawnCallback").unwrap();
-    let spawn_player = fivem::exports::import_function("spawnmanager", "spawnPlayer").unwrap();
-    let set_autospawn = fivem::exports::import_function("spawnmanager", "setAutoSpawn").unwrap();
-    let force_respawn = fivem::exports::import_function("spawnmanager", "forceRespawn").unwrap();
+        cfx::exports::import_function("spawnmanager", "setAutoSpawnCallback").unwrap();
+    let spawn_player = cfx::exports::import_function("spawnmanager", "spawnPlayer").unwrap();
+    let set_autospawn = cfx::exports::import_function("spawnmanager", "setAutoSpawn").unwrap();
+    let force_respawn = cfx::exports::import_function("spawnmanager", "forceRespawn").unwrap();
 
     let task = async move {
         let on_spawn = RefFunction::new(|spawn_info: Vec<SpawnInfo>| -> Vec<bool> {
-            fivem::log(format!("player spawned: {:?}", spawn_info));
+            cfx::log(format!("player spawned: {:?}", spawn_info));
 
-            fivem::client::ped::set_ped_default_component_variation(
-                fivem::client::player::player_ped_id(),
+            cfx::client::ped::set_ped_default_component_variation(
+                cfx::client::player::player_ped_id(),
             );
 
             let task = async {
-                fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+                cfx::runtime::sleep_for(Duration::from_secs(5)).await;
                 play_animation().await;
-                fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+                cfx::runtime::sleep_for(Duration::from_secs(5)).await;
 
                 let time = std::time::Instant::now();
                 play_animation().await;
-                fivem::log(format!("play_animation() {:?}", time.elapsed()));
+                cfx::log(format!("play_animation() {:?}", time.elapsed()));
             };
 
-            let _ = fivem::runtime::spawn(task);
+            let _ = cfx::runtime::spawn(task);
 
             vec![true]
         });
@@ -133,17 +133,17 @@ pub extern "C" fn _start() {
         force_respawn.invoke::<(), Vec<u8>>(vec![]);
     };
 
-    fivem::client::cfx::set_discord_app_id("843983771278901279");
+    cfx::client::cfx::set_discord_app_id("843983771278901279");
 
     let logger = async {
         let wrapper = || {
-            let player = fivem::client::player::player_ped_id();
-            let camera = fivem::client::cam::get_gameplay_cam_coord();
-            let player_pos = fivem::client::entity::get_entity_coords(player, false);
-            let id = fivem::client::player::player_id();
-            let name = fivem::client::player::get_player_name(id)?;
+            let player = cfx::client::player::player_ped_id();
+            let camera = cfx::client::cam::get_gameplay_cam_coord();
+            let player_pos = cfx::client::entity::get_entity_coords(player, false);
+            let id = cfx::client::player::player_id();
+            let name = cfx::client::player::get_player_name(id)?;
 
-            fivem::log(format!(
+            cfx::log(format!(
                 "player {} camera: {:?} player: {:?} name: {:?} id: {}",
                 player, camera, player_pos, name, id
             ));
@@ -153,14 +153,14 @@ pub extern "C" fn _start() {
 
         loop {
             wrapper();
-            fivem::runtime::sleep_for(Duration::from_secs(5)).await;
+            cfx::runtime::sleep_for(Duration::from_secs(5)).await;
         }
     };
 
-    let _ = fivem::runtime::spawn(logger);
-    let _ = fivem::runtime::spawn(task);
+    let _ = cfx::runtime::spawn(logger);
+    let _ = cfx::runtime::spawn(task);
 
     // commands
     set_command_handler();
-    let _ = fivem::runtime::spawn(listen_to_pongs());
+    let _ = cfx::runtime::spawn(listen_to_pongs());
 }

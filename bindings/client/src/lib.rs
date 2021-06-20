@@ -3,7 +3,7 @@ use serde::Serialize;
 pub mod natives;
 
 pub mod events {
-    use fivem_core::events::Event;
+    use cfx_core::events::Event;
     use futures::Stream;
     use serde::{Deserialize, Serialize};
 
@@ -13,14 +13,11 @@ pub mod events {
     }
 
     pub fn client_game_type_start<'a>() -> impl Stream<Item = Event<'a, ClientGameTypeStart>> {
-        fivem_core::events::subscribe(
-            "onClientGameTypeStart",
-            fivem_core::events::EventScope::Local,
-        )
+        cfx_core::events::subscribe("onClientGameTypeStart", cfx_core::events::EventScope::Local)
     }
 }
 
-use fivem_core::runtime::sleep_for;
+use cfx_core::runtime::sleep_for;
 use natives::{player::*, streaming::*, task::*};
 use std::time::Duration;
 

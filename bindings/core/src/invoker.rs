@@ -117,6 +117,13 @@ impl<'a> From<RefFunction> for Val<'a> {
     }
 }
 
+impl<'a> From<&'a [u8]> for Val<'a> {
+    #[inline]
+    fn from(bytes: &'a [u8]) -> Self {
+        Val::Bytes(bytes)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum InvokeError {
     NullResult,

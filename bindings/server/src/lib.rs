@@ -3,8 +3,8 @@ use serde::Serialize;
 pub mod natives;
 
 pub mod events {
-    use fivem_core::events::Event;
-    use fivem_core::ref_funcs::ExternRefFunction;
+    use cfx_core::events::Event;
+    use cfx_core::ref_funcs::ExternRefFunction;
     use futures::Stream;
     use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,7 @@ pub mod events {
     }
 
     pub fn player_connecting<'a>() -> impl Stream<Item = Event<'a, PlayerConnecting>> {
-        fivem_core::events::subscribe("playerConnecting", fivem_core::events::EventScope::Local)
+        cfx_core::events::subscribe("playerConnecting", cfx_core::events::EventScope::Local)
     }
 }
 

@@ -281,7 +281,7 @@ fn make_native(native: RustNative, return_style: ReturnStyle) -> String {
         };
 
         format!(
-            "{}fivem_core::invoker::invoke{}(0x{:X?}, &[{}]){}",
+            "{}cfx_core::invoker::invoke{}(0x{:X?}, &[{}]){}",
             prefix, turbofish, native.hash, args, suffix,
         )
     };
@@ -289,7 +289,7 @@ fn make_native(native: RustNative, return_style: ReturnStyle) -> String {
     let ret = match return_style {
         ReturnStyle::Option => format!("Option<{}>", rettype),
         ReturnStyle::Unwrap => format!("{}", rettype),
-        ReturnStyle::Result => format!("Result<{}, fivem_core::invoker::InvokeError>", rettype),
+        ReturnStyle::Result => format!("Result<{}, cfx_core::invoker::InvokeError>", rettype),
         ReturnStyle::UnwrapOrDefault => {
             if let Some(ret) = native.returns.as_ref() {
                 if ret.may_be_default {
@@ -341,6 +341,7 @@ pub fn make_natives_for_set(
     for (namespace, natives) in namespaces {
         if namespace.len() > 0 {
             let _ = writeln!(file, "pub mod {} {{", namespace.to_ascii_lowercase());
+            let _ = writeln!(file, "use cfx_core::types::ToMessagePack;");
         }
 
         for native in natives

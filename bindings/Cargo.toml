@@ -1,15 +1,17 @@
 [package]
-name = "fivem"
+name = "cfx"
 version = "0.1.0"
 authors = ["ZOTTCE <zottce@gmail.com>"]
+description = "Tools to write WASM scripts for CitizenFX"
+license = "MIT"
 edition = "2018"
 
 [features]
 default = []
-server = ["fivem-server"]
-client = ["fivem-client"]
+server = ["cfx-server"]
+client = ["cfx-client"]
 
 [dependencies]
-fivem-core = { path = "core/" }
-fivem-client = { path = "client/", optional = true }
-fivem-server = { path = "server/", optional = true }
+cfx-core = { path = "core/" }
+cfx-client = { path = "client/", optional = true }
+cfx-server = { path = "server/", optional = true }
