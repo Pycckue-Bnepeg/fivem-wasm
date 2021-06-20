@@ -5,6 +5,7 @@ authors = ["ZOTTCE <zottce@gmail.com>"]
 description = "Tools to write WASM scripts for CitizenFX"
 license = "MIT"
 edition = "2018"
+include = ["**/*.rs"]
 
 [dependencies]
 cfx-core = { path = "../core" }
