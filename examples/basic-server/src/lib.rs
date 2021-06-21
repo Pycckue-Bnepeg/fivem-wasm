@@ -3,6 +3,8 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 async fn handle_connections() {
+    use cfx::server::cfx::*;
+
     let events = cfx::server::events::player_connecting();
 
     futures::pin_mut!(events);
@@ -13,6 +15,14 @@ async fn handle_connections() {
             event.payload().player_name,
             event.source(),
         ));
+
+        let src = event.source();
+        let idents_count = get_num_player_identifiers(src);
+
+        for i in 0..idents_count {
+            let ident = get_player_identifier(src, i);
+            cfx::log(format!("ident: {:?}", ident));
+        }
 
         let _ = cfx::runtime::spawn(show_something(event.into_inner()));
     }

@@ -20,18 +20,19 @@ struct SpawnInfo {
 #[derive(Serialize)]
 struct SpawnPlayer(SpawnInfo, ExternRefFunction);
 
-const ANIM_DICT: &str = "random@shop_robbery";
-const ANIM_NAME: &str = "robbery_action_f";
+const ANIM_DICT: &str = "amb@code_human_cower@male@exit";
+const ANIM_NAME: &str = "exit_flee";
 
 async fn play_animation() {
     use cfx::client::TaskSequenceBuilder;
 
     TaskSequenceBuilder::new()
         .play_anim(
-            ANIM_DICT, ANIM_NAME, 8.0, 1.0, -1, 1, 1.0, false, false, false,
+            ANIM_DICT, ANIM_NAME, 8.0, 8.0, -1, 0, 0.0, false, false, false,
         )
         .await
-        .run(true);
+        .run_and_wait(true)
+        .await;
 }
 
 async fn listen_to_pongs() {
@@ -109,13 +110,8 @@ pub extern "C" fn _start() {
             );
 
             let task = async {
-                cfx::runtime::sleep_for(Duration::from_secs(5)).await;
                 play_animation().await;
-                cfx::runtime::sleep_for(Duration::from_secs(5)).await;
-
-                let time = std::time::Instant::now();
-                play_animation().await;
-                cfx::log(format!("play_animation() {:?}", time.elapsed()));
+                cfx::log("play_animation()");
             };
 
             let _ = cfx::runtime::spawn(task);

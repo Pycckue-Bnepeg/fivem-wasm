@@ -24,6 +24,7 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct TaskSequenceBuilder {
     sequence: i32,
+    repeat: bool,
 }
 
 impl TaskSequenceBuilder {
@@ -31,7 +32,10 @@ impl TaskSequenceBuilder {
         let mut sequence = 0;
         open_sequence_task(&mut sequence);
 
-        TaskSequenceBuilder { sequence }
+        TaskSequenceBuilder {
+            sequence,
+            repeat: false,
+        }
     }
 
     pub async fn play_anim<Dict, Name>(
@@ -77,6 +81,11 @@ impl TaskSequenceBuilder {
         self
     }
 
+    pub fn repeat(mut self, repeat: bool) -> Self {
+        self.repeat = repeat;
+        self
+    }
+
     pub fn run(self, clear_tasks: bool) {
         let ped = player_ped_id();
 
@@ -84,8 +93,21 @@ impl TaskSequenceBuilder {
             clear_ped_tasks(ped);
         }
 
+        set_sequence_to_repeat(self.sequence, self.repeat);
         close_sequence_task(self.sequence);
         task_perform_sequence(ped, self.sequence);
+    }
+
+    pub async fn run_and_wait(self, clear_tasks: bool) {
+        self.run(clear_tasks);
+
+        sleep_for(Duration::from_millis(10)).await;
+
+        let ped = player_ped_id();
+
+        while crate::natives::task::get_sequence_progress(ped) != -1 {
+            sleep_for(Duration::from_millis(10)).await;
+        }
     }
 }
 
