@@ -151,6 +151,7 @@ fn make_server_getter(
                 game: native.game.clone(),
                 namespace: Some("CFX".to_owned()),
                 returns: ret_ty,
+                doc: native.doc.clone(),
             };
 
             append_native_to_set(native, natives);

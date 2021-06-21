@@ -15,6 +15,6 @@ server = ["cfx-server"]
 client = ["cfx-client"]
 
 [dependencies]
-cfx-core = { path = "core/" }
-cfx-client = { path = "client/", optional = true }
-cfx-server = { path = "server/", optional = true }
+cfx-core = { path = "core/", version = "0.1.0" }
+cfx-client = { path = "client/", version = "0.1.0", optional = true }
+cfx-server = { path = "server/", version = "0.1.0", optional = true }

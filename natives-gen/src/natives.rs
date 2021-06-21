@@ -22,6 +22,7 @@ struct RustNative {
     game: Option<String>,
     arguments: Vec<RustArgument>,
     returns: Option<RustType>,
+    doc: Option<String>,
 }
 
 impl RustNative {
@@ -48,6 +49,7 @@ impl RustNative {
                 .collect(),
 
             returns: find_type(types, &cfx.returns).map(|(_, ty)| convert_type(ty, true)),
+            doc: cfx.doc.clone(),
         }
     }
 }
@@ -61,6 +63,7 @@ pub struct CfxNative {
     pub game: Option<String>,
     pub arguments: Vec<(String, String)>,
     pub returns: String,
+    pub doc: Option<String>,
 }
 
 #[derive(Debug)]
@@ -187,7 +190,7 @@ fn format_natives(params: Vec<FuncExec>, default_set: ApiSet) -> Vec<CfxNative> 
                             }
                         }
 
-                        "doc" => (),
+                        "doc" => native.doc = Some(arg),
                         _ => (),
                     }
                 }
@@ -303,9 +306,19 @@ fn make_native(native: RustNative, return_style: ReturnStyle) -> String {
         }
     };
 
+    let doc = native
+        .doc
+        .map(|doc| {
+            doc.lines()
+                .skip(1)
+                .map(|line| format!("/// {} \r\n", line))
+                .join("")
+        })
+        .unwrap_or_default();
+
     format!(
-        "#[inline] pub fn {}({}) -> {} {{ {} }}",
-        name, args, ret, body
+        "{}#[inline] pub fn {}({}) -> {} {{ {} }}",
+        doc, name, args, ret, body
     )
 }
 

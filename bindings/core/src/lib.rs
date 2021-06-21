@@ -1,10 +1,10 @@
 pub mod events;
-#[doc(hidden)]
 pub mod exports;
 pub mod invoker;
 pub mod ref_funcs;
 pub mod runtime;
 pub mod types {
+    //! Utility types to work with WASM runtime.
     pub use cfx_wasm_rt_types::*;
 
     pub trait ToMessagePack {
@@ -25,7 +25,7 @@ mod ffi {
     }
 }
 
-/// Logs a message to the FiveM server or client
+/// Logs a message to the CitizenFX server or client
 pub fn log<T: AsRef<str>>(message: T) {
     let msg = message.as_ref();
     let cstr = std::ffi::CString::new(msg).unwrap();

@@ -32,6 +32,7 @@ pub mod ffi {
     }
 }
 
+#[doc(hidden)]
 #[no_mangle]
 pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
     RETVAL_BUFFER.with(|retval| {
@@ -42,6 +43,7 @@ pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
     })
 }
 
+/// Internal representation of arguments to pass in [`invoke`].
 pub enum Val<'a> {
     RefInteger(&'a i32),
     RefFloat(&'a f32),
@@ -131,6 +133,9 @@ pub enum InvokeError {
     Code(i32),
 }
 
+/// Invokes a CitizenFX native function by a hash.
+///
+/// Most of the time you should use already generated bindings for client and server.
 pub fn invoke<'a, Ret, Args>(hash: u64, arguments: Args) -> Result<Ret, InvokeError>
 where
     Ret: RetVal,

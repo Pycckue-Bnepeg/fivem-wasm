@@ -3,15 +3,12 @@
 
 This is a main repository implementing the runtime and containing bindings for Rust.
 
-[The fork](https://github.com/zottce/fivem) contains only [C++ component](https://github.com/ZOTTCE/fivem/tree/wasm/code/components/citizen-scripting-wasm) that links and calls [a static library built in Rust](glue/).
+[The fork](https://github.com/zottce/fivem) contains only [C++ component](https://github.com/ZOTTCE/fivem/tree/wasm/code/components/citizen-scripting-wasm) that links and calls a static library built in Rust.
 
 ## Modules
 * [`examples/basic-client`](examples/basic-client/) and [`examples/basic-server`](examples/basic-server/) - an example shows how to use bindings to access FiveM.
 * [`bindings`](bindings/) - Rust bindings to WASM runtime to create mods.
-* [`glue`](glue/) - a crate that builds as a static library used by the FiveM component.
 * [`natives-gen`](natives-gen/) - a generator for natives.
-* [`runtime`](runtime/) - implementation of wasmtime
-* [`standalone`](standalone/) - not used
 
 ## Building
 * Install [the Rust compiler](https://rust-lang.org) and WASM toolchain (wasm32-wasi)
