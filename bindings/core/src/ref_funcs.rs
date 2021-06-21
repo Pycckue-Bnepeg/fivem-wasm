@@ -20,6 +20,7 @@ thread_local! {
     static REF_IDX: RefCell<u32> = RefCell::new(0);
 }
 
+#[doc(hidden)]
 #[no_mangle]
 pub unsafe extern "C" fn __cfx_call_ref(
     ref_idx: u32,
@@ -49,6 +50,7 @@ pub unsafe extern "C" fn __cfx_call_ref(
     RETVAL.with(|scr| scr.as_ptr())
 }
 
+#[doc(hidden)]
 #[no_mangle]
 pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
     HANDLERS.with(|handlers| {
@@ -62,6 +64,7 @@ pub unsafe extern "C" fn __cfx_duplicate_ref(ref_idx: u32) -> u32 {
     ref_idx
 }
 
+#[doc(hidden)]
 #[no_mangle]
 pub unsafe extern "C" fn __cfx_remove_ref(ref_idx: u32) {
     HANDLERS.with(|handlers| {
@@ -136,6 +139,7 @@ impl InnerRefFunction {
     }
 }
 
+/// External ref function (from exports or events).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "_ExtStruct")]
 pub struct ExternRefFunction((i8, serde_bytes::ByteBuf));
@@ -150,6 +154,7 @@ impl ExternRefFunction {
         unsafe { std::str::from_utf8_unchecked(&self.0 .1) }
     }
 
+    /// Invoke the function.
     pub fn invoke<Out, In>(&self, args: In) -> Option<Out>
     where
         In: Serialize,
@@ -166,6 +171,19 @@ pub struct RefFunction {
 }
 
 impl RefFunction {
+    /// Creates a new ref function that can be passed to CitizenFX.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let export = RefFunction::new(|vector: Vec<Vector>| {
+    ///     if let Some(vec) = vector.get(0) {
+    ///         let length = (vec.x.powi(2) + vec.y.powi(2) + vec.z.powi(2)).sqrt();
+    ///         return vec![length];
+    ///     }
+    ///
+    ///     vec![0.0]
+    /// });
+    /// ```
     pub fn new<Handler, Input, Output>(handler: Handler) -> RefFunction
     where
         Handler: Fn(Input) -> Output + 'static,
@@ -210,6 +228,7 @@ impl RefFunction {
         RefFunction { name, inner }
     }
 
+    /// Same as [`RefFunction::new`] but doesn't deserialize input value.
     pub fn new_raw<Handler>(handler: Handler) -> RefFunction
     where
         Handler: Fn(&[u8]) -> Vec<u8> + 'static,

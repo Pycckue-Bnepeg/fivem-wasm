@@ -1,6 +1,6 @@
 .idea
 target/
 *.h
-utils/components.json
+utils
 bindings/*/src/natives.rs
 

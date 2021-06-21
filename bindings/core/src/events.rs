@@ -1,3 +1,6 @@
+//! Utils to work with CitizenFX events.
+//!
+//!
 use futures::{
     channel::mpsc::{unbounded, UnboundedSender},
     Future, Stream, StreamExt,
@@ -122,11 +125,15 @@ impl<'de, T: Deserialize<'de>> Event<'de, T> {
     }
 }
 
+/// Unused for now
 pub struct EventOwned<T: DeserializeOwned> {
     source: String,
     payload: T,
 }
 
+/// Scope of an event.
+///
+/// Local events cannot be triggered from network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventScope {
     Local,
@@ -298,10 +305,34 @@ where
     let _ = crate::invoker::register_resource_as_event_handler(event_name);
 }
 
+/// Wrapper around a function that implements [`Handler`]
 pub struct HandlerFn<T> {
     func: T,
 }
 
+/// Wraps an `async` function into [`HandlerFn`] object.
+///
+/// # Example
+/// ```rust,ignore
+/// use cfx::events::*;
+///
+/// #[derive(Debug, Deserialize)]
+/// struct SomeEvent(String)
+///
+/// async fn handle_event(source: String, event: SomeEvent) -> Result<(), ()> {
+///     cfx::log(format!("got an event with: {}", event.0));
+///     Ok(())
+/// }
+///
+/// // wrap our function into Handler
+/// let handler = handler_fn(handle_event);
+///
+/// set_event_handler(
+///     "someEvent",
+///     handler,
+///     EventScope::Local,
+/// );
+/// ```
 pub fn handler_fn<T>(func: T) -> HandlerFn<T> {
     HandlerFn { func }
 }
