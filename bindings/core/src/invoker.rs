@@ -9,10 +9,10 @@ use std::cell::RefCell;
 const RETVAL_BUFFER_SIZE: usize = 1 << 15;
 
 thread_local! {
-    static RETVAL_BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; RETVAL_BUFFER_SIZE]);
+    pub(crate) static RETVAL_BUFFER: RefCell<Vec<u8>> = RefCell::new(vec![0; RETVAL_BUFFER_SIZE]);
 }
 
-pub mod ffi {
+mod ffi {
     #[link(wasm_import_module = "host")]
     extern "C" {
         pub fn invoke(
@@ -30,17 +30,6 @@ pub mod ffi {
             buffer_capacity: usize,
         ) -> i32;
     }
-}
-
-#[doc(hidden)]
-#[no_mangle]
-pub extern "C" fn __cfx_extend_retval_buffer(new_size: usize) -> *const u8 {
-    RETVAL_BUFFER.with(|retval| {
-        let mut vec = retval.borrow_mut();
-        vec.resize(new_size, 0);
-
-        vec.as_ptr()
-    })
 }
 
 /// Internal representation of arguments to pass in [`invoke`].

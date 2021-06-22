@@ -77,7 +77,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cfx"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "cfx-client",
  "cfx-core",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "cfx-client"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cfx-core",
  "futures",
@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "cfx-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-stream",
  "cfx-wasm-rt-types",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "cfx-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cfx-core",
  "futures",

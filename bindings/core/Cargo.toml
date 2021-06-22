@@ -1,6 +1,6 @@
 [package]
 name = "cfx-core"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["ZOTTCE <zottce@gmail.com>"]
 description = "Core engine of WASM scripts to communicate with CitizenFX WASM Runtime"
 license = "MIT"

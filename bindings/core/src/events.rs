@@ -1,17 +1,15 @@
 //! Utils to work with CitizenFX events.
 //!
+//! Currently the best method to use [`subscribe`] (allows you to use it with async/await syntax).
 //!
-use futures::{
-    channel::mpsc::{unbounded, UnboundedSender},
-    Future, Stream, StreamExt,
-};
-
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{borrow::Cow, cell::RefCell, ffi::CStr, rc::Rc};
-
-use rustc_hash::FxHashMap;
+//! Or with [`set_event_handler_closure`]
+use futures::{channel::mpsc::unbounded, Future, Stream, StreamExt};
 
 use crate::invoker::Val;
+use crate::wasm_impl::events::*;
+
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{borrow::Cow, cell::RefCell, rc::Rc};
 
 /// A raw event contains bytes from the emitters.
 #[derive(Debug)]
@@ -23,12 +21,12 @@ pub struct RawEvent {
 }
 
 pub struct RawEventRef<'a> {
-    source: Cow<'a, str>,
-    payload: &'a [u8],
+    pub source: Cow<'a, str>,
+    pub payload: &'a [u8],
 }
 
 impl<'a> RawEventRef<'a> {
-    fn to_raw_event(&self) -> RawEvent {
+    pub(crate) fn to_raw_event(&self) -> RawEvent {
         RawEvent {
             source: self.source.to_string(),
             payload: self.payload.into(),
@@ -36,73 +34,7 @@ impl<'a> RawEventRef<'a> {
     }
 }
 
-struct EventSub {
-    scope: EventScope,
-    handler: EventHandler,
-}
-
-enum EventHandler {
-    Future(UnboundedSender<RawEvent>),
-    Function(Box<dyn Fn(RawEventRef) + 'static>),
-}
-
-// TODO: Vec<UnboundedSender<Event>>
-thread_local! {
-    static EVENTS: RefCell<FxHashMap<String, EventSub>> = RefCell::new(FxHashMap::default());
-}
-
-#[doc(hidden)]
-#[no_mangle]
-pub unsafe extern "C" fn __cfx_on_event(
-    cstring: *const i8,
-    args: *const u8,
-    args_length: u32,
-    source: *const i8,
-) {
-    let name = CStr::from_ptr(cstring).to_str().unwrap();
-    let payload = std::slice::from_raw_parts(args, args_length as _);
-    let source = CStr::from_ptr(source).to_str().unwrap();
-
-    EVENTS.with(|events| {
-        let events = events.borrow();
-
-        if let Some(sub) = events.get(name) {
-            let source = if source.starts_with("net:") {
-                if sub.scope != EventScope::Network {
-                    return;
-                }
-
-                Cow::from(source.strip_prefix("net:").unwrap())
-            } else if
-            /* is_duplicity_version && */
-            source.starts_with("internal-net:") {
-                Cow::from(source.strip_prefix("internal-net:").unwrap())
-            } else {
-                Cow::from("")
-            };
-
-            let event = RawEventRef { source, payload };
-
-            match sub.handler {
-                EventHandler::Function(ref func) => {
-                    func(event);
-                }
-
-                EventHandler::Future(ref sender) => {
-                    let _ = sender.unbounded_send(event.to_raw_event());
-                }
-            }
-        }
-    });
-
-    crate::runtime::LOCAL_POOL.with(|lp| {
-        if let Ok(mut lp) = lp.try_borrow_mut() {
-            lp.run_until_stalled();
-        }
-    });
-}
-
-/// Same as [`Event`] but without clone and allocations (for [`set_event_handler`]).
+/// An incoming event from CitizenFX.
 pub struct Event<'de, T: Deserialize<'de>> {
     source: Cow<'de, str>,
     payload: T,

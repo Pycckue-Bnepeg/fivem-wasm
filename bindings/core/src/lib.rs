@@ -3,6 +3,7 @@ pub mod exports;
 pub mod invoker;
 pub mod ref_funcs;
 pub mod runtime;
+
 pub mod types {
     //! Utility types to work with WASM runtime.
     pub use cfx_wasm_rt_types::*;
@@ -17,6 +18,8 @@ pub mod types {
         }
     }
 }
+
+pub(crate) mod wasm_impl;
 
 mod ffi {
     #[link(wasm_import_module = "host")]

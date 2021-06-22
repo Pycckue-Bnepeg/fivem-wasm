@@ -24,7 +24,7 @@ const ANIM_DICT: &str = "amb@code_human_cower@male@exit";
 const ANIM_NAME: &str = "exit_flee";
 
 async fn play_animation() {
-    use cfx::client::TaskSequenceBuilder;
+    use cfx::client::task::TaskSequenceBuilder;
 
     TaskSequenceBuilder::new()
         .play_anim(
@@ -71,7 +71,7 @@ fn set_command_handler() {
     }
 
     let handler = RefFunction::new(|_: Command| {
-        cfx::events::emit_to_server(
+        cfx::client::emit_net(
             "client_ping",
             Ping {
                 req: "pong me please".to_owned(),
@@ -79,7 +79,7 @@ fn set_command_handler() {
         );
     });
 
-    cfx::client::cfx::register_command("wasm_ping", handler, false);
+    cfx::client::natives::cfx::register_command("wasm_ping", handler, false);
 }
 
 #[no_mangle]
@@ -105,8 +105,8 @@ pub extern "C" fn _start() {
         let on_spawn = RefFunction::new(|spawn_info: Vec<SpawnInfo>| -> Vec<bool> {
             cfx::log(format!("player spawned: {:?}", spawn_info));
 
-            cfx::client::ped::set_ped_default_component_variation(
-                cfx::client::player::player_ped_id(),
+            cfx::client::natives::ped::set_ped_default_component_variation(
+                cfx::client::natives::player::player_ped_id(),
             );
 
             let task = async {
@@ -129,15 +129,15 @@ pub extern "C" fn _start() {
         force_respawn.invoke::<(), Vec<u8>>(vec![]);
     };
 
-    cfx::client::cfx::set_discord_app_id("843983771278901279");
+    cfx::client::natives::cfx::set_discord_app_id("843983771278901279");
 
     let logger = async {
         let wrapper = || {
-            let player = cfx::client::player::player_ped_id();
-            let camera = cfx::client::cam::get_gameplay_cam_coord();
-            let player_pos = cfx::client::entity::get_entity_coords(player, false);
-            let id = cfx::client::player::player_id();
-            let name = cfx::client::player::get_player_name(id)?;
+            let player = cfx::client::natives::player::player_ped_id();
+            let camera = cfx::client::natives::cam::get_gameplay_cam_coord();
+            let player_pos = cfx::client::natives::entity::get_entity_coords(player, false);
+            let id = cfx::client::natives::player::player_id();
+            let name = cfx::client::natives::player::get_player_name(id)?;
 
             cfx::log(format!(
                 "player {} camera: {:?} player: {:?} name: {:?} id: {}",

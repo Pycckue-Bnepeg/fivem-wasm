@@ -3,7 +3,7 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 async fn handle_connections() {
-    use cfx::server::cfx::*;
+    use cfx::server::natives::cfx::*;
 
     let events = cfx::server::events::player_connecting();
 
@@ -51,7 +51,7 @@ async fn handle_custom_event() {
             ping.req
         ));
 
-        cfx::events::emit_to_client(
+        cfx::server::emit_net(
             "server_pong",
             event.source(),
             Pong((ping.req.to_owned(), counter)),

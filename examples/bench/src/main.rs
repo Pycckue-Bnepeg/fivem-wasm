@@ -20,7 +20,7 @@ struct CustomEvent {
 }
 
 fn bench_invoking() {
-    use cfx::server::cfx::*;
+    use cfx::server::natives::cfx::*;
 
     log!(
         "bench_invoking::wasm::get_num_resources {}",
