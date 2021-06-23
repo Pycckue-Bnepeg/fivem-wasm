@@ -13,7 +13,7 @@ thread_local! {
 }
 
 mod ffi {
-    #[link(wasm_import_module = "host")]
+    #[link(wasm_import_module = "cfx")]
     extern "C" {
         pub fn invoke(
             hash: u64,

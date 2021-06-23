@@ -22,9 +22,9 @@ pub mod types {
 pub(crate) mod wasm_impl;
 
 mod ffi {
-    #[link(wasm_import_module = "host")]
+    #[link(wasm_import_module = "cfx")]
     extern "C" {
-        pub fn log(ptr: i32, len: i32);
+        pub fn script_log(message: *const u8);
     }
 }
 
@@ -35,6 +35,6 @@ pub fn log<T: AsRef<str>>(message: T) {
     let bytes = cstr.as_bytes_with_nul();
 
     unsafe {
-        ffi::log(bytes.as_ptr() as _, bytes.len() as _);
+        ffi::script_log(bytes.as_ptr());
     }
 }
