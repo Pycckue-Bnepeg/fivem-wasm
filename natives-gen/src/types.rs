@@ -1,5 +1,5 @@
 use crate::parser::{parse_file, Argument, FuncExec};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Default, Clone)]
 pub struct CfxType {
@@ -198,7 +198,7 @@ fn format_types(types: Vec<FuncExec>) -> HashMap<String, CfxType> {
     formated
 }
 
-pub fn types_from_file(file: &str) -> HashMap<String, CfxType> {
+pub fn types_from_file(file: &PathBuf) -> HashMap<String, CfxType> {
     let types = parse_file(file);
     format_types(types)
 }
