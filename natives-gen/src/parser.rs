@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use full_moon::ast::{
     Call, Expression, Field, FunctionArgs, FunctionCall, Prefix, Stmt, Suffix, Value,
@@ -116,8 +116,7 @@ fn unwrap(stmt: &Stmt) -> Option<FuncExec> {
     }
 }
 
-pub fn parse_file(file: &PathBuf) -> Vec<FuncExec> {
-    println!("{:#?}", file);
+pub fn parse_file<T: AsRef<Path>>(file: &T) -> Vec<FuncExec> {
     let types = std::fs::read_to_string(file).unwrap();
     let ast_types = full_moon::parse(&types).unwrap();
 
