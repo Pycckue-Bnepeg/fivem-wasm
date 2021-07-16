@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     natives::{ApiSet, CfxNative},
@@ -42,7 +42,7 @@ fn format_rpcs(rpcs: Vec<FuncExec>) -> Vec<Rpc> {
         .collect()
 }
 
-pub fn rpcs_from_file(file: &str) -> Vec<Rpc> {
+pub fn rpcs_from_file(file: &PathBuf) -> Vec<Rpc> {
     let rpcs = parse_file(file);
     format_rpcs(rpcs)
 }

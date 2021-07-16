@@ -2,6 +2,7 @@ use convert_case::{Case, Casing};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::io::*;
+use std::path::PathBuf;
 
 use crate::parser::*;
 use crate::types::*;
@@ -73,6 +74,7 @@ pub struct RustArgument {
     pub ty: RustType,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum ReturnStyle {
     /// Full unwrap
@@ -125,7 +127,7 @@ impl Default for ApiSet {
     }
 }
 
-pub fn natives_from_file(file: &str, default_set: ApiSet) -> Vec<CfxNative> {
+pub fn natives_from_file(file: &PathBuf, default_set: ApiSet) -> Vec<CfxNative> {
     let params = parse_file(file);
     format_natives(params, default_set)
 }
